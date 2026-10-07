@@ -25,17 +25,29 @@
   a.tip { display:block; width:100%; max-width:340px; padding:14px; border-radius:12px; border:1px solid var(--cyan);
           color:var(--cyan); text-decoration:none; font-weight:700; text-align:center; margin-top:8px; }
 </style>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-T83CQZCHBZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-T83CQZCHBZ');
+  // one "link_click" event per tap on anything marked data-track
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-track]');
+    if (el) gtag('event', 'link_click', { link_name: el.dataset.track, link_url: el.href || '', page: location.pathname });
+  });
+</script>
 </head>
 <body>
   <h1>Cambio</h1>
   <p>Live peso rates, 90-day charts and a cash converter.</p>
-  <a class="btn" href="usd.html">🇺🇸 US Dollars<span>USD ↔ MXN</span></a>
-  <a class="btn" href="cad.html">🇨🇦 Canadian Dollars<span>CAD ↔ MXN</span></a>
-  <a class="tip" href="https://ko-fi.com/jasonhite" target="_blank" rel="noopener">☕ Found this useful? Buy me a coffee</a>
+  <a class="btn" data-track="open_usd" href="usd.html">🇺🇸 US Dollars<span>USD ↔ MXN</span></a>
+  <a class="btn" data-track="open_cad" href="cad.html">🇨🇦 Canadian Dollars<span>CAD ↔ MXN</span></a>
+  <a class="tip" data-track="kofi" href="https://ko-fi.com/jasonhite" target="_blank" rel="noopener">☕ Found this useful? Buy me a coffee</a>
   <h2 id="more">More from Jason</h2>
-  <a class="app" href="https://www.aipassageplan.com" target="_blank" rel="noopener">🌊 AI Passage Plan<span>Local weather knowledge for cruisers in Mexico and beyond.</span></a>
-  <a class="app" href="https://www.eyachtsurveyor.com" target="_blank" rel="noopener">⛵ eYacht Surveyor<span>Evaluate yachts you're shopping for before you spend any money on a survey.</span></a>
-  <a class="app" href="https://www.facebook.com/groups/seaofcortezsailors" target="_blank" rel="noopener">👥 Sea of Cortez Sailors<span>7,000+ member community sharing tips and tricks for cruising in Mexico.</span></a>
-  <a class="app" href="https://jasonhite.gumroad.com/" target="_blank" rel="noopener">📚 Jason's Books<span>Books by Jason Hite on Gumroad.</span></a>
+  <a class="app" data-track="aipassageplan" href="https://www.aipassageplan.com" target="_blank" rel="noopener">🌊 AI Passage Plan<span>Local weather knowledge for cruisers in Mexico and beyond.</span></a>
+  <a class="app" data-track="eyachtsurveyor" href="https://www.eyachtsurveyor.com" target="_blank" rel="noopener">⛵ eYacht Surveyor<span>Evaluate yachts you're shopping for before you spend any money on a survey.</span></a>
+  <a class="app" data-track="fb_group" href="https://www.facebook.com/groups/seaofcortezsailors" target="_blank" rel="noopener">👥 Sea of Cortez Sailors<span>7,000+ member community sharing tips and tricks for cruising in Mexico.</span></a>
+  <a class="app" data-track="books" href="https://jasonhite.gumroad.com/" target="_blank" rel="noopener">📚 Jason's Books<span>Books by Jason Hite on Gumroad.</span></a>
 </body>
 </html>

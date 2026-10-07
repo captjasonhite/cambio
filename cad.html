@@ -172,6 +172,18 @@
   .foot { text-align: center; font-size: 0.8rem; color: var(--muted); padding-top: 10px; }
   .foot a { color: var(--muted); text-decoration: none; }
 </style>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-T83CQZCHBZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-T83CQZCHBZ');
+  // one "link_click" event per tap on anything marked data-track
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-track]');
+    if (el) gtag('event', 'link_click', { link_name: el.dataset.track, link_url: el.href || '', page: location.pathname });
+  });
+</script>
 </head>
 <body>
 
@@ -187,9 +199,9 @@
     <h2 class="flag" id="flip-flag" title="Tap to flip direction">🇲🇽 🇨🇦</h2>
     <div class="head-right">
       <div class="toggle" id="flip-cad">
-        <button data-f="0" class="active">chart</button><button data-f="1">accts</button>
+        <button data-f="0" class="active">chart</button><button data-f="1" data-track="accts">accts</button>
       </div>
-      <button class="conv-open" id="conv-open">💱 Convert</button>
+      <button class="conv-open" id="conv-open" data-track="convert">💱 Convert</button>
       <span class="badge flat" id="age-cad"></span>
     </div>
   </div>
@@ -217,7 +229,7 @@
     </div>
   </div>
 </section>
-<div class="foot"><a href="https://ko-fi.com/jasonhite" target="_blank" rel="noopener">☕ Tip</a> · <a href="index.html#more">⚓ More apps</a></div>
+<div class="foot"><a data-track="kofi" href="https://ko-fi.com/jasonhite" target="_blank" rel="noopener">☕ Tip</a> · <a data-track="more_apps" href="index.html#more">⚓ More apps</a></div>
 
 <script>
 let RANGE_DAYS = +localStorage.getItem("pv-range") || 182;
