@@ -278,7 +278,7 @@ function makeChart(id, series, color) {
 // ---------- data ----------
 
 const FX_CACHE_KEY = "pv-fx-cache-mxn";
-const FX_CACHE_TTL = 12 * 60 * 60 * 1000; // 12h — source is daily ECB data
+const FX_CACHE_TTL = 60 * 60 * 1000; // 1h — so today's ECB rate shows up soon after it's published
 
 // Overlay today's live rate: fetch fx_live.js from the pv-fx repo (GitHub
 // Actions updates it every 15 min with the real-time interbank rate); fall
@@ -294,23 +294,26 @@ async function fetchLiveRates() {
 }
 let FX_RATE_META = { src: "none", t: 0 }; // set by applyLiveRate, read by setRateAge
 async function applyLiveRate(j) {
-  FX_RATE_META = { src: "none", t: 0 };
+  // Newest source wins: fx_live.js (Action runs every few hours in practice,
+  // not every 15 min), ECB via Frankfurter (published ~14:15 UTC on weekdays),
+  // open.er-api.com (once a day, around 00:00 UTC).
+  const SYMS = ["MXN"];
   const today = iso(new Date());
-  const cur = j.rates[today] || {};
+  const cands = [];
+  if (SYMS.every(c => j.rates[today]?.[c])) cands.push({ src: "ecb", t: Date.parse(today + "T14:15:00Z"), r: j.rates[today] });
   const live = await fetchLiveRates();
-  if (live?.mxn && live.t && Date.now() - live.t < 2 * 60 * 60 * 1000) { // 2 h
-    cur.MXN = live.mxn;
-    FX_RATE_META = { src: "live", t: live.t };
-  } else {
-    try {
-      const er = await fetchJSON("https://open.er-api.com/v6/latest/USD");
-      if (er?.result === "success" && er.rates.MXN) {
-        cur.MXN = er.rates.MXN;
-        FX_RATE_META = { src: "daily", t: Date.parse(er.time_last_update_utc) || Date.now() };
-      }
-    } catch (e) { /* keep ECB-only data */ }
+  if (live?.t && SYMS.every(c => live[c.toLowerCase()])) {
+    cands.push({ src: "live", t: live.t, r: Object.fromEntries(SYMS.map(c => [c, live[c.toLowerCase()]])) });
   }
-  if (cur.MXN) j.rates[today] = cur;
+  try {
+    const er = await fetchJSON("https://open.er-api.com/v6/latest/USD");
+    if (er?.result === "success" && SYMS.every(c => er.rates[c])) {
+      cands.push({ src: "daily", t: Date.parse(er.time_last_update_utc) || 0, r: Object.fromEntries(SYMS.map(c => [c, er.rates[c]])) });
+    }
+  } catch (e) { /* use what we have */ }
+  cands.sort((a, b) => b.t - a.t);
+  FX_RATE_META = cands[0] ? { src: cands[0].src, t: cands[0].t } : { src: "none", t: 0 };
+  if (cands[0]) j.rates[today] = { ...cands[0].r };
 }
 
 // staleness flag: hidden when current (<24 h), red "stale" otherwise,
@@ -318,7 +321,8 @@ async function applyLiveRate(j) {
 function setRateAge(el, lastDate) {
   let t = 0, why = "";
   if (FX_RATE_META.src === "live" && FX_RATE_META.t) { t = FX_RATE_META.t; why = "Live interbank rate"; }
-  else if (FX_RATE_META.src === "daily" && FX_RATE_META.t) { t = FX_RATE_META.t; why = "Daily rate — live feed unavailable"; }
+  else if (FX_RATE_META.src === "daily" && FX_RATE_META.t) { t = FX_RATE_META.t; why = "Daily rate"; }
+  else if (FX_RATE_META.src === "ecb" && FX_RATE_META.t) { t = FX_RATE_META.t; why = "ECB reference rate"; }
   else if (lastDate) { t = Date.parse(lastDate + "T12:00:00Z"); why = "ECB reference rate — live and daily feeds unavailable"; }
   if (!t || isNaN(t)) { el.style.display = "none"; el.textContent = ""; el.title = ""; return; }
   const ageH = (Date.now() - t) / 36e5;
