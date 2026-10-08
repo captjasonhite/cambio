@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0d12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="usdcad.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Cambio US/CA">
+<title>CAD / USD</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0d12;
+    --card: #12161e;
+    --card-edge: #1e2530;
+    --text: #e6ebf2;
+    --muted: #7b8698;
+    --grid: #1c2330;
+    --cyan: #60a5fa;
+    --green: #4ade80;
+    --red: #f87171;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    padding: calc(12px + var(--safe-top)) 14px calc(14px + var(--safe-bottom));
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  /* compact range row */
+  .ranges { display: flex; gap: 6px; margin-bottom: 12px; }
+  .ranges button {
+    flex: 1;
+    background: var(--card); color: var(--muted); border: 1px solid var(--card-edge);
+    border-radius: 10px; padding: 11px 0; font-size: 0.8rem; font-weight: 600;
+    cursor: pointer; touch-action: manipulation;
+  }
+  .ranges button.active { background: #1a2230; color: var(--text); border-color: #33415a; }
+
+  /* the one tile */
+  .card {
+    flex: 1;
+    background: var(--card); border: 1px solid var(--card-edge); border-radius: 18px;
+    padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 10px;
+    min-height: 0;
+  }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .flag {
+    font-size: 1.3rem; cursor: pointer; user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  @keyframes flag-rotate { from { transform: perspective(200px) rotateY(0deg); } to { transform: perspective(200px) rotateY(360deg); } }
+  .flag.flipping { animation: flag-rotate 0.5s ease; }
+  .head-right { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; min-width: 0; }
+  .card-head .flag { white-space: nowrap; flex: none; font-size: 1.15rem; }
+  .badge {
+    font-size: 0.78rem; font-weight: 600; padding: 5px 10px; border-radius: 999px;
+    white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .badge.up   { color: var(--green); background: rgba(74, 222, 128, 0.1); }
+  .badge.down { color: var(--red);   background: rgba(248, 113, 113, 0.1); }
+  .badge.flat { color: var(--muted); background: rgba(123, 134, 152, 0.12); }
+  .badge.stale { color: var(--red); background: rgba(248, 113, 113, 0.12); }
+
+  .toggle { display: inline-flex; border: 1px solid var(--card-edge); border-radius: 10px; overflow: hidden; }
+  .toggle button {
+    background: transparent; color: var(--muted); border: none; padding: 10px 10px;
+    font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: inherit;
+    touch-action: manipulation;
+  }
+  .toggle button.active { background: #1a2230; color: var(--text); }
+
+  .value-row { display: flex; align-items: center; gap: 10px; }
+  .value {
+    font-size: clamp(2.6rem, 11vw, 3.4rem); font-weight: 700;
+    letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+  }
+  .value-unit { color: var(--muted); font-size: 1rem; }
+
+  .chart-wrap { position: relative; flex: 1 1 0; min-width: 0; height: 56px; overflow: hidden; }
+  .value { flex: none; } .value-unit { flex: none; }
+  .chart-empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 0.85rem; text-align: center; padding: 12px; line-height: 1.5;
+  }
+  .chart-empty[hidden] { display: none; }
+  .error { color: var(--red); font-size: 0.8rem; }
+
+  /* bills table */
+  table.bills { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.bills td {
+    padding: 9px 6px; border-bottom: 1px solid var(--grid);
+    font-size: 0.95rem; text-align: right;
+  }
+  table.bills td:first-child { text-align: left; color: var(--muted); font-weight: 600; }
+  table.bills tr:last-child td { border-bottom: none; }
+  table.bills td:last-child { font-weight: 700; }
+
+  /* flip faces */
+  .card:not(.flipped) .face-back { display: none; }
+  .card.flipped .face-front { display: none; }
+  .face-front { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 10px; }
+  .face-back { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+
+  /* cash table */
+  .cash-tbl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .cash-tbl th { font-size: 0.78rem; color: var(--muted); font-weight: 600; padding: 4px 8px; text-align: right; }
+  .cash-tbl th:first-child { text-align: left; }
+  .cash-tbl td { padding: 8px 8px; border-bottom: 1px solid var(--grid); text-align: right; font-size: 1rem; }
+  .cash-tbl td:first-child { text-align: left; }
+  .cash-tbl input {
+    width: 100%; background: #0d1117; border: 1px solid var(--card-edge); border-radius: 8px;
+    color: var(--text); padding: 10px 8px; font-size: 1rem; font-family: inherit;
+  }
+  .cash-tbl input:focus { outline: none; border-color: #33415a; background: #1a2230; }
+  .cash-tbl input[type="number"]::-webkit-outer-spin-button,
+  .cash-tbl input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .cash-tbl input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  .cash-ctl { display: flex; gap: 10px; }
+  .cash-ctl button {
+    width: 56px; height: 48px; font-size: 1.3rem; font-weight: 700;
+    background: #0d1117; color: var(--text); border: 1px solid var(--card-edge);
+    border-radius: 12px; cursor: pointer; touch-action: manipulation;
+  }
+  .cash-ctl button:disabled { opacity: 0.35; }
+  .cash-tbl .row-del {
+    background: none; border: none; color: var(--muted); font-size: 1rem; font-weight: 700;
+    cursor: pointer; padding: 0 2px; line-height: 1;
+  }
+  .cash-tbl .row-del:hover { color: #f87171; }
+
+  /* price converter */
+  .conv-open {
+    height: 38px; padding: 0 10px; font-size: 0.85rem; white-space: nowrap; flex: none; font-weight: 700; font-family: inherit;
+    background: #1a2230; color: var(--text); border: 1px solid #33415a; border-radius: 12px;
+    cursor: pointer; touch-action: manipulation;
+  }
+  .conv-modal {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(5, 8, 12, 0.6);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .conv-modal[hidden] { display: none; }
+  .conv-box {
+    width: calc(100% - 40px); max-width: 420px;
+    background: #12161e; border: 1px solid #33415a; border-radius: 16px;
+    padding: 16px; display: flex; flex-direction: column; gap: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  }
+  .conv-head { display: flex; justify-content: space-between; align-items: center; }
+  .conv-head span { font-weight: 700; font-size: 1rem; }
+  .conv-close { background: none; border: none; color: var(--muted); font-size: 1.5rem; cursor: pointer; padding: 0 6px; line-height: 1; }
+  #conv-amt {
+    width: 100%; background: #0d1117; border: 1px solid var(--card-edge); border-radius: 10px;
+    color: var(--text); padding: 14px 12px; font-size: 1.4rem; font-family: inherit; text-align: center;
+    -webkit-appearance: none; appearance: textfield; -moz-appearance: textfield;
+  }
+  #conv-amt:focus { outline: none; border-color: #33415a; }
+  #conv-amt::-webkit-outer-spin-button, #conv-amt::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .conv-result-row { text-align: center; }
+  .conv-result { font-weight: 700; font-size: 1.6rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .foot { text-align: center; font-size: 0.8rem; color: var(--muted); padding-top: 10px; }
+  .foot a { color: var(--muted); text-decoration: none; }
+</style>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-T83CQZCHBZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-T83CQZCHBZ');
+  // one "link_click" event per tap on anything marked data-track
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-track]');
+    if (el) gtag('event', 'link_click', { link_name: el.dataset.track, link_url: el.href || '', page: location.pathname });
+  });
+</script>
+</head>
+<body>
+
+<div class="ranges" id="ranges">
+  <button data-days="7">1W</button>
+  <button data-days="30">1M</button>
+  <button data-days="182">6M</button>
+  <button data-days="365">1Y</button>
+</div>
+
+<section class="card" id="card-usdcad">
+  <div class="card-head">
+    <h2 class="flag" id="flip-flag" title="Tap to flip direction">🇨🇦 🇺🇸</h2>
+    <div class="head-right">
+      <div class="toggle" id="flip-usdcad">
+        <button data-f="0" class="active">chart</button><button data-f="1" data-track="accts">accts</button>
+      </div>
+      <button class="conv-open" id="conv-open" data-track="convert">💱 Convert</button>
+      <span class="badge flat" id="age-usdcad"></span>
+    </div>
+  </div>
+  <div class="conv-modal" id="conv-modal" hidden>
+    <div class="conv-box">
+      <div class="conv-head">
+        <span id="conv-label">CAD → USD</span>
+        <button class="conv-close" id="conv-close" title="Close">×</button>
+      </div>
+      <div class="conv-result-row"><span class="conv-result" id="conv-result">—</span></div>
+      <input id="conv-amt" type="number" inputmode="decimal" min="0" step="any" placeholder="e.g. 82" />
+    </div>
+  </div>
+  <div class="face face-front">
+    <div class="value-row"><span class="value" id="value-usdcad">—</span><span class="value-unit" id="unit-usdcad">C$ / US$</span><div class="chart-wrap"><canvas id="chart-usdcad"></canvas><div class="chart-empty" id="chart-usdcad-empty" hidden>loading…</div></div></div>
+    <table class="bills" id="bill-table"><tr><td>…</td></tr></table>
+  </div>
+  <div class="face face-back">
+    <table class="cash-tbl" id="cash-usdcad-tbl">
+      <thead><tr><th>Acct</th><th>Amt</th><th>value</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="cash-ctl">
+      <button id="cash-usdcad-add" title="Add row">+</button>
+    </div>
+  </div>
+</section>
+<div class="foot"><a data-track="kofi" href="https://ko-fi.com/jasonhite" target="_blank" rel="noopener">☕ Tip</a> · <a data-track="more_apps" href="index.html#more">⚓ More apps</a></div>
+
+<script>
+let RANGE_DAYS = +localStorage.getItem("pv-range") || 182;
+if (![7, 30, 182, 365].includes(RANGE_DAYS)) RANGE_DAYS = 182;
+
+const FX_LATEST = {}; // { cad } - latest rate, used by bills/cash
+const charts = {};
+let FX_REVERSED = false;
+
+const $ = id => document.getElementById(id);
+// Local (CDMX) calendar date — toISOString() is UTC and is a day ahead between 18:00 and midnight
+const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(url.split("?")[0].replace(/^https?:\/\//, "") + " → " + r.status);
+  return r.json();
+}
+
+function makeChart(id, series, color) {
+  const canvas = $(id);
+  if (charts[id]) charts[id].destroy();
+  const ctx = canvas.getContext("2d");
+  const g = ctx.createLinearGradient(0, 0, 0, 56);
+  g.addColorStop(0, color + "4d");
+  g.addColorStop(1, color + "00");
+  charts[id] = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: series.dates,
+      datasets: [{
+        data: series.values,
+        borderColor: color,
+        backgroundColor: g,
+        fill: true,
+        pointRadius: 0,
+        borderWidth: 1.5,
+        tension: 0.25,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#1a2230", borderColor: "#2c3646", borderWidth: 1,
+          titleColor: "#e6ebf2", bodyColor: "#e6ebf2", padding: 10, displayColors: false,
+        },
+      },
+      interaction: { mode: "index", intersect: false },
+      scales: { x: { display: false }, y: { display: false, min: Math.min(...series.values), max: Math.max(...series.values) } },
+    },
+  });
+}
+
+// ---------- data ----------
+
+const FX_CACHE_KEY = "pv-fx-cache-usdcad";
+const FX_CACHE_TTL = 60 * 60 * 1000; // 1h — so today's ECB rate shows up soon after it's published
+
+// Overlay today's live rate: fetch fx_live.js from the pv-fx repo (GitHub
+// Actions updates it every 15 min with the real-time interbank rate); fall
+// back to open.er-api.com's daily rate. ECB (Frankfurter) lags ~1-2 days,
+// so never use it for today.
+const FX_LIVE_URL = "https://raw.githubusercontent.com/captjasonhite/pv-fx/main/fx_live.js";
+async function fetchLiveRates() {
+  try {
+    const txt = await (await fetch(FX_LIVE_URL, { cache: "no-store" })).text();
+    const m = txt.match(/window\.FX_LIVE\s*=\s*(\{[\s\S]*?\})\s*;/);
+    return m ? JSON.parse(m[1]) : null;
+  } catch (e) { return null; }
+}
+let FX_RATE_META = { src: "none", t: 0 }; // set by applyLiveRate, read by setRateAge
+async function applyLiveRate(j) {
+  // Newest source wins: fx_live.js (Action runs every few hours in practice,
+  // not every 15 min), ECB via Frankfurter (published ~14:15 UTC on weekdays),
+  // open.er-api.com (once a day, around 00:00 UTC).
+  const SYMS = ["CAD"];
+  const today = iso(new Date());
+  const cands = [];
+  if (SYMS.every(c => j.rates[today]?.[c])) cands.push({ src: "ecb", t: Date.parse(today + "T14:15:00Z"), r: j.rates[today] });
+  const live = await fetchLiveRates();
+  if (live?.t && SYMS.every(c => live[c.toLowerCase()])) {
+    cands.push({ src: "live", t: live.t, r: Object.fromEntries(SYMS.map(c => [c, live[c.toLowerCase()]])) });
+  }
+  try {
+    const er = await fetchJSON("https://open.er-api.com/v6/latest/USD");
+    if (er?.result === "success" && SYMS.every(c => er.rates[c])) {
+      cands.push({ src: "daily", t: Date.parse(er.time_last_update_utc) || 0, r: Object.fromEntries(SYMS.map(c => [c, er.rates[c]])) });
+    }
+  } catch (e) { /* use what we have */ }
+  cands.sort((a, b) => b.t - a.t);
+  FX_RATE_META = cands[0] ? { src: cands[0].src, t: cands[0].t } : { src: "none", t: 0 };
+  if (cands[0]) j.rates[today] = { ...cands[0].r };
+}
+
+// staleness flag: hidden when current (<24 h), red "stale" otherwise,
+// red "broken" at 3+ days (means a feed is actually down)
+function setRateAge(el, lastDate) {
+  let t = 0, why = "";
+  if (FX_RATE_META.src === "live" && FX_RATE_META.t) { t = FX_RATE_META.t; why = "Live interbank rate"; }
+  else if (FX_RATE_META.src === "daily" && FX_RATE_META.t) { t = FX_RATE_META.t; why = "Daily rate"; }
+  else if (FX_RATE_META.src === "ecb" && FX_RATE_META.t) { t = FX_RATE_META.t; why = "ECB reference rate"; }
+  else if (lastDate) { t = Date.parse(lastDate + "T12:00:00Z"); why = "ECB reference rate — live and daily feeds unavailable"; }
+  if (!t || isNaN(t)) { el.style.display = "none"; el.textContent = ""; el.title = ""; return; }
+  const ageH = (Date.now() - t) / 36e5;
+  if (ageH < 24) { el.style.display = "none"; el.className = "badge flat"; el.textContent = ""; el.title = why + " — " + new Date(t).toLocaleString(); return; } // current
+  el.style.display = "";
+  el.className = "badge stale";
+  el.textContent = ageH < 72 ? "⚠ stale" : "⚠ broken";
+  el.title = why + (ageH >= 72 ? " — rate " + Math.round(ageH / 24) + "d old, a feed is down" : "") + " — as of " + new Date(t).toLocaleString();
+}
+
+async function loadFX() {
+  // FX source is daily-only: always show at least 7 days so the chart is never empty
+  const start = iso(daysAgo(Math.max(RANGE_DAYS, 7)));
+  const url = `https://api.frankfurter.dev/v1/${start}..${iso(new Date())}?base=USD&symbols=CAD`;
+  let j = null;
+  try {
+    const c = JSON.parse(localStorage.getItem(FX_CACHE_KEY) || "null");
+    if (c && c.url === url && Date.now() - c.t < FX_CACHE_TTL) j = c.j;
+  } catch (e) {}
+  if (!j) {
+    j = await fetchJSON(url);
+    try { localStorage.setItem(FX_CACHE_KEY, JSON.stringify({ t: Date.now(), url, j })); } catch (e) {}
+  }
+  await applyLiveRate(j);
+  const dates = Object.keys(j.rates).sort();
+  return { dates, values: dates.map(d => j.rates[d].CAD) }; // CAD per USD
+}
+
+const BILLS_FWD = [100, 50, 20, 10, 5];   // CAD denominations
+const BILLS_REV = [100, 50, 20, 10, 5];   // USD denominations
+
+function renderBills() {
+  const cad = FX_LATEST.cad;
+  const t = $("bill-table");
+  if (!cad) { t.innerHTML = "<tr><td>…</td></tr>"; return; }
+  t.innerHTML = FX_REVERSED
+    ? BILLS_REV.map(b => `<tr><td>$${b} USD</td><td>$${(b * cad).toFixed(2)} CAD</td></tr>`).join("")
+    : BILLS_FWD.map(b => `<tr><td>$${b} CAD</td><td>$${(b / cad).toFixed(2)} USD</td></tr>`).join("");
+}
+
+async function renderFX() {
+  try {
+    const s = await loadFX();
+    const vs = FX_REVERSED ? s.values.map(v => 1 / v) : s.values;
+    $("value-usdcad").textContent = vs[vs.length - 1].toFixed(4);
+    $("unit-usdcad").textContent = FX_REVERSED ? "US$ / C$" : "C$ / US$";
+    setRateAge($("age-usdcad"), s.dates[s.dates.length - 1]);
+    $("chart-usdcad-empty").hidden = s.values.length >= 2;
+    $("chart-usdcad").parentElement.style.display = s.values.length < 2 ? "none" : "";
+    if (s.values.length >= 2) makeChart("chart-usdcad", { dates: s.dates, values: vs }, "#60a5fa");
+    FX_LATEST.cad = s.values[s.values.length - 1]; // always raw CAD per USD
+    renderBills();
+    cashUpdaters.forEach(u => u());
+    convRefresh();
+  } catch (e) {
+    $("value-usdcad").textContent = "—";
+    $("chart-usdcad-empty").hidden = false;
+    $("chart-usdcad-empty").innerHTML = '<span class="error">failed: ' + e.message + "</span>";
+  }
+}
+
+// ---------- cash table (flip face) ----------
+const cashUpdaters = [];
+const cashTables = {};
+function initCashTable(prefix, ccy) {
+  const tbody = document.querySelector("#cash-" + prefix + "-tbl tbody");
+  const addBtn = $("cash-" + prefix + "-add");
+  // One account list per flag order. The first flag's currency is the
+  // denomination of the amounts; "value" converts to the other currency.
+  const baseKey = "pv-cash-" + prefix + "-rows"; // own key: "pv-cash-usd-rows-usd" belongs to usd.html
+  const state = () => FX_REVERSED ? "usd" : "cad"; // primary currency
+  const key = () => baseKey + "-" + state();
+
+  let rows = [];
+  function load() {
+    const list = JSON.parse(localStorage.getItem(key()) || "null");
+    const arr = Array.isArray(list) ? list : [];
+    const locked = arr.find(r => r.locked);
+    const primary = state();
+    rows = [{ acct: "CASH (" + primary.toUpperCase() + ")", amt: locked ? locked.amt : "", locked: true }, ...arr.filter(r => !r.locked)];
+  }
+
+  const rate = () => FX_LATEST.cad;
+  const save = () => localStorage.setItem(key(), JSON.stringify(rows));
+
+  function makeRow(r) {
+    const tr = document.createElement("tr");
+    const tdA = document.createElement("td");
+    if (r.locked) {
+      tdA.textContent = r.acct; // fixed label, not editable
+    } else {
+      const inA = document.createElement("input");
+      inA.type = "text"; inA.placeholder = "Acct"; inA.value = r.acct || "";
+      tdA.appendChild(inA);
+    }
+    const tdM = document.createElement("td");
+    const inM = document.createElement("input");
+    inM.type = "number"; inM.min = "0"; inM.step = "any"; inM.placeholder = "0"; inM.value = r.amt ?? "";
+    tdM.appendChild(inM);
+    const tdV = document.createElement("td");
+    const val = document.createElement("span");
+    val.className = "cash-val"; val.textContent = "—";
+    tdV.appendChild(val);
+    tr.append(tdA, tdM, tdV);
+    if (!r.locked) {
+      const tdX = document.createElement("td");
+      const x = document.createElement("button");
+      x.className = "row-del"; x.title = "Remove row"; x.textContent = "×";
+      x.addEventListener("click", () => {
+        const i = rows.indexOf(r);
+        if (i === -1) return;
+        rows.splice(i, 1);
+        tbody.removeChild(tr);
+        save(); refresh();
+      });
+      tdX.appendChild(x);
+      tr.append(tdX);
+    }
+    return tr;
+  }
+
+  const refresh = () => {
+    const rt = rate();
+    const primary = state();
+    tbody.querySelectorAll("tr").forEach((tr, i) => {
+      const r = rows[i];
+      const amt = parseFloat(tr.children[1].querySelector("input").value);
+      const val = tr.children[2].firstChild;
+      if (!isFinite(amt) || amt <= 0 || !rt) { val.textContent = "—"; return; }
+      // Amounts are denominated in the first flag's currency; convert to the other.
+      val.textContent = "$" + (primary === "cad" ? amt / rt : amt * rt).toLocaleString("en-US", { maximumFractionDigits: 0 });
+    });
+  };
+
+  function renderTable() {
+    tbody.innerHTML = "";
+    rows.forEach(r => tbody.appendChild(makeRow(r)));
+    refresh();
+  }
+
+  load();
+  renderTable();
+
+  const sync = () => {
+    tbody.querySelectorAll("tr").forEach((tr, i) => {
+      const r = rows[i];
+      if (r.locked) {
+        r.amt = tr.children[1].querySelector("input").value;
+      } else {
+        r.acct = tr.children[0].querySelector("input").value;
+        r.amt = tr.children[1].querySelector("input").value;
+      }
+    });
+    save(); refresh();
+  };
+  tbody.addEventListener("input", sync);
+  addBtn.addEventListener("click", () => {
+    const nr = { acct: "", amt: "" };
+    rows.push(nr);
+    tbody.appendChild(makeRow(nr));
+    save(); refresh();
+  });
+  cashUpdaters.push(refresh);
+  cashTables[prefix] = { setState: () => { load(); renderTable(); } };
+}
+initCashTable("usdcad", "USD");
+
+// ---------- flip chart/cash + direction ----------
+function initFlip(toggleId, cardId) {
+  const key = "pv-flip-" + toggleId.slice(5);
+  if (localStorage.getItem(key) === "1") {
+    $(cardId).classList.add("flipped");
+    document.querySelectorAll("#" + toggleId + " button").forEach(b => b.classList.toggle("active", b.dataset.f === "1"));
+  }
+  $(toggleId).addEventListener("click", e => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    $(cardId).classList.toggle("flipped", btn.dataset.f === "1");
+    document.querySelectorAll("#" + toggleId + " button").forEach(b => b.classList.toggle("active", b === btn));
+    localStorage.setItem(key, btn.dataset.f);
+  });
+}
+initFlip("flip-usdcad", "card-usdcad");
+
+$("flip-flag").addEventListener("click", () => {
+  FX_REVERSED = !FX_REVERSED;
+  const h2 = $("flip-flag");
+  h2.textContent = FX_REVERSED ? "🇺🇸 🇨🇦" : "🇨🇦 🇺🇸";
+  h2.classList.remove("flipping"); void h2.offsetWidth; h2.classList.add("flipping");
+  renderFX();
+  if (cashTables.usdcad) cashTables.usdcad.setState();
+  convRefresh();
+});
+
+// ---------- price converter ----------
+const convModal = $("conv-modal");
+const convAmt = $("conv-amt");
+const convResult = $("conv-result");
+const convLabel = $("conv-label");
+const convPrimary = () => FX_REVERSED ? "USD" : "CAD"; // first flag's currency
+function convUpdate() {
+  const rt = FX_LATEST.cad;
+  const p = convPrimary();
+  const amt = parseFloat(convAmt.value);
+  if (!isFinite(amt) || amt <= 0 || !rt) { convResult.textContent = "—"; return; }
+  const out = p === "CAD" ? amt / rt : amt * rt;
+  const outCcy = p === "CAD" ? "USD" : "CAD";
+  convResult.textContent = "$" + out.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " " + outCcy;
+}
+function convRefresh() {
+  convLabel.textContent = convPrimary() + " → " + (convPrimary() === "CAD" ? "USD" : "CAD");
+  convUpdate();
+}
+function closeConv() {
+  convModal.hidden = true;
+  convAmt.value = "";
+  convResult.textContent = "—";
+}
+$("conv-open").addEventListener("click", () => {
+  convModal.hidden = false;
+  convRefresh();
+  convAmt.focus();
+});
+$("conv-close").addEventListener("click", closeConv);
+convModal.addEventListener("click", e => { if (e.target === convModal) closeConv(); }); // tap outside closes
+convAmt.addEventListener("input", convUpdate);
+
+// ---------- range buttons ----------
+document.getElementById("ranges").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  RANGE_DAYS = parseInt(btn.dataset.days, 10);
+  localStorage.setItem("pv-range", RANGE_DAYS);
+  document.querySelectorAll("#ranges button").forEach(b => b.classList.toggle("active", b === btn));
+  renderFX();
+});
+document.querySelectorAll("#ranges button").forEach(b => b.classList.toggle("active", +b.dataset.days === RANGE_DAYS));
+
+renderFX();
+setInterval(renderFX, 15 * 60 * 1000); // auto-refresh every 15 min
+</script>
+</body>
+</html>
