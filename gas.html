@@ -29,7 +29,7 @@
     --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { min-height: 100%; }
+  html, body { min-height: 100%; overflow-x: hidden; }
   body {
     background: var(--bg);
     color: var(--text);
@@ -42,7 +42,7 @@
   .card {
     background: var(--card); border: 1px solid var(--card-edge); border-radius: 18px;
     padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 14px;
-    max-width: 520px; width: 100%; margin: 0 auto;
+    max-width: 520px; width: 100%; min-width: 0; margin: 0 auto;
   }
   .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .card-head h2 { font-size: 1.15rem; }
@@ -63,24 +63,32 @@
   .note:empty { display: none; }
 
   /* price boxes — tap one to use its price in the calculator */
-  .gas-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  /* swipes sideways on narrow phones; the rest of the page never scrolls sideways */
+  .gas-row {
+    display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory;
+    margin: 0 -16px; padding: 0 16px; scroll-padding: 0 16px; scrollbar-width: none;
+  }
+  .gas-row::-webkit-scrollbar { display: none; }
   .gas-box {
     background: #0d1117; border: 1px solid var(--card-edge); border-radius: 12px;
     padding: 10px; display: flex; flex-direction: column; gap: 4px; cursor: pointer;
     touch-action: manipulation; text-align: left; font-family: inherit; color: var(--text);
+    flex: 1 0 116px; scroll-snap-align: start;
   }
   .gas-box.picked { border-color: #33415a; background: #1a2230; }
-  .gas-name { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  .gas-name { font-size: 0.8rem; color: var(--muted); font-weight: 700; }
+  .gas-name.regular { color: var(--green); }
+  .gas-name.premium { color: var(--red); }
   .gas-mxn { font-size: 0.95rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .gas-fx { font-size: 0.8rem; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .gas-mxn small, .gas-fx small { font-size: 0.72rem; font-weight: 500; color: var(--muted); }
   .empty { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 14px 0; }
 
   .section { border-top: 1px solid var(--card-edge); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
-  .row { display: flex; align-items: center; gap: 8px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .row input {
     background: #0d1117; border: 1px solid var(--card-edge); border-radius: 10px;
-    color: var(--text); font-size: 1rem; font-weight: 600; padding: 10px; width: 86px;
+    color: var(--text); font-size: 1rem; font-weight: 600; padding: 10px; width: 78px;
     font-variant-numeric: tabular-nums; font-family: inherit;
     -moz-appearance: textfield; appearance: textfield;
   }
@@ -96,6 +104,7 @@
   .tank-bar {
     -webkit-appearance: none; appearance: none; width: 100%; height: 16px; margin: 8px 0 0;
     border-radius: 8px; border: 1px solid var(--card-edge); cursor: pointer;
+    touch-action: pan-y; /* sideways drags move the gauge, not the page */
     background: linear-gradient(90deg, var(--red), var(--amber) 30%, var(--green) 70%) 0 0 / var(--lvl, 50%) 100% no-repeat, #0d1117;
   }
   .tank-bar::-webkit-slider-thumb {
@@ -137,7 +146,7 @@
     </div>
   </div>
   <p class="note" id="note"></p>
-  <div class="gas-row" id="gas-row"><div class="empty" style="grid-column: 1 / -1">loading…</div></div>
+  <div class="gas-row" id="gas-row"><div class="empty" style="flex: 1">loading…</div></div>
 
   <div class="section">
     <div class="row">
@@ -214,14 +223,14 @@ function render() {
     ? `${placeName} · ${a.n} station${a.n === 1 ? "" : "s"} within ${a.r} km`
     : `${placeName} · no stations within ${a.r} km`;
   if (!a.n) {
-    $("gas-row").innerHTML = '<div class="empty" style="grid-column: 1 / -1">No stations nearby. Tap PV, or try 📍 again somewhere in Mexico.</div>';
+    $("gas-row").innerHTML = '<div class="empty" style="flex: 1">No stations nearby. Tap PV, or try 📍 again somewhere in Mexico.</div>';
     return;
   }
   const box = (key, name, mxnL) => {
     const usdGal = FX.usd && mxnL != null ? mxnL * L_PER_GAL / FX.usd : null;
     const cadL = FX.cad && mxnL != null ? mxnL / FX.cad : null;
     return `<button class="gas-box${PICKED === key ? " picked" : ""}" data-fuel="${key}" data-price="${mxnL != null ? mxnL.toFixed(2) : ""}">` +
-      `<span class="gas-name">${name}</span>` +
+      `<span class="gas-name ${key}">${name}</span>` +
       `<span class="gas-mxn">🇲🇽 ${mxnL != null ? "$" + money(mxnL) : "—"} <small>/L</small></span>` +
       `<span class="gas-fx">🇺🇸 ${usdGal != null ? "$" + money(usdGal) : "—"} <small>/gal</small></span>` +
       `<span class="gas-fx">🇨🇦 ${cadL != null ? "C$" + money(cadL) : "—"} <small>/L</small></span></button>`;
@@ -331,7 +340,7 @@ async function loadGas() {
       $("stale").title = "Prices from " + GAS.date + " — the daily update hasn't run since";
     }
   } catch (e) {
-    $("gas-row").innerHTML = '<div class="empty" style="grid-column: 1 / -1">Gas prices unavailable right now.</div>';
+    $("gas-row").innerHTML = '<div class="empty" style="flex: 1">Gas prices unavailable right now.</div>';
     $("where").textContent = "Puerto Vallarta";
   }
 }
