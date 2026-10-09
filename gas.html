@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0d12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="gas.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Cambio Gas">
+<title>Gas Prices</title>
+<style>
+  :root {
+    --bg: #0a0d12;
+    --card: #12161e;
+    --card-edge: #1e2530;
+    --text: #e6ebf2;
+    --muted: #7b8698;
+    --grid: #1c2330;
+    --cyan: #22d3ee;
+    --amber: #fbbf24;
+    --green: #4ade80;
+    --red: #f87171;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    padding: calc(12px + var(--safe-top)) 14px calc(14px + var(--safe-bottom));
+    -webkit-tap-highlight-color: transparent;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--card-edge); border-radius: 18px;
+    padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 14px;
+    max-width: 520px; width: 100%; margin: 0 auto;
+  }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .card-head h2 { font-size: 1.15rem; }
+  .sub { color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
+  .head-right { display: flex; gap: 6px; align-items: center; flex: none; }
+  .btn {
+    height: 38px; padding: 0 12px; font-size: 0.85rem; white-space: nowrap; font-weight: 700; font-family: inherit;
+    background: #1a2230; color: var(--text); border: 1px solid #33415a; border-radius: 12px;
+    cursor: pointer; touch-action: manipulation;
+  }
+  .btn[hidden] { display: none; }
+  .badge {
+    font-size: 0.78rem; font-weight: 600; padding: 5px 10px; border-radius: 999px; white-space: nowrap;
+    color: var(--red); background: rgba(248, 113, 113, 0.12);
+  }
+  .badge[hidden] { display: none; }
+  .note { color: var(--amber); font-size: 0.8rem; }
+  .note:empty { display: none; }
+
+  /* price boxes — tap one to use its price in the calculator */
+  .gas-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .gas-box {
+    background: #0d1117; border: 1px solid var(--card-edge); border-radius: 12px;
+    padding: 10px; display: flex; flex-direction: column; gap: 4px; cursor: pointer;
+    touch-action: manipulation; text-align: left; font-family: inherit; color: var(--text);
+  }
+  .gas-box.picked { border-color: #33415a; background: #1a2230; }
+  .gas-name { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  .gas-mxn { font-size: 0.95rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .gas-fx { font-size: 0.8rem; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .gas-mxn small, .gas-fx small { font-size: 0.72rem; font-weight: 500; color: var(--muted); }
+  .empty { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 14px 0; }
+
+  .section { border-top: 1px solid var(--card-edge); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row input {
+    background: #0d1117; border: 1px solid var(--card-edge); border-radius: 10px;
+    color: var(--text); font-size: 1rem; font-weight: 600; padding: 10px; width: 86px;
+    font-variant-numeric: tabular-nums; font-family: inherit;
+    -moz-appearance: textfield; appearance: textfield;
+  }
+  .row input:focus { outline: none; border-color: #33415a; }
+  .row input::placeholder { color: #4a5363; font-weight: 400; font-style: italic; opacity: 1; }
+  .row input::-webkit-outer-spin-button, .row input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .lbl { color: var(--muted); font-size: 0.85rem; }
+  .out { margin-left: auto; font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .fx-line { font-size: 0.9rem; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fx-line:empty { display: none; }
+
+  /* fuel gauge */
+  .tank-bar {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 16px; margin: 8px 0 0;
+    border-radius: 8px; border: 1px solid var(--card-edge); cursor: pointer;
+    background: linear-gradient(90deg, var(--red), var(--amber) 30%, var(--green) 70%) 0 0 / var(--lvl, 50%) 100% no-repeat, #0d1117;
+  }
+  .tank-bar::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 30px; height: 30px; border-radius: 50%;
+    background: var(--text); border: 3px solid #0d1117; box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
+  .tank-bar::-moz-range-thumb {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--text); border: 3px solid #0d1117; box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
+  .ticks { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); padding: 0 6px; }
+
+  .src { color: var(--muted); font-size: 0.72rem; line-height: 1.5; }
+  .foot { text-align: center; font-size: 0.8rem; color: var(--muted); padding-top: 10px; }
+  .foot a { color: var(--muted); text-decoration: none; }
+</style>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-T83CQZCHBZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-T83CQZCHBZ');
+  // one "link_click" event per tap on anything marked data-track
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-track]');
+    if (el) gtag('event', 'link_click', { link_name: el.dataset.track, link_url: el.href || '', page: location.pathname });
+  });
+</script>
+</head>
+<body>
+
+<section class="card">
+  <div class="card-head">
+    <div><h2>⛽ Gas prices</h2><p class="sub" id="where">Puerto Vallarta · loading…</p></div>
+    <div class="head-right">
+      <span class="badge" id="stale" hidden></span>
+      <button class="btn" id="btn-pv" data-track="gas_pv" hidden>PV</button>
+      <button class="btn" id="btn-loc" data-track="gas_locate" title="Use my location">📍</button>
+    </div>
+  </div>
+  <p class="note" id="note"></p>
+  <div class="gas-row" id="gas-row"><div class="empty" style="grid-column: 1 / -1">loading…</div></div>
+
+  <div class="section">
+    <div class="row">
+      <span class="lbl">Capacity</span>
+      <input type="number" id="tank-size" inputmode="decimal" min="0" step="any" placeholder="size">
+      <span class="lbl">L</span>
+      <span class="out" id="tank-need"></span>
+    </div>
+    <input type="range" class="tank-bar" id="tank-level" min="0" max="100" step="1" value="50" aria-label="Fuel gauge level">
+    <div class="ticks"><span>E</span><span>¼</span><span>½</span><span>¾</span><span>F</span></div>
+  </div>
+
+  <div class="section">
+    <div class="row">
+      <input type="number" id="calc-qty" inputmode="decimal" min="0" step="any" placeholder="qty">
+      <span class="lbl">L ×</span>
+      <input type="number" id="calc-price" inputmode="decimal" min="0" step="any" placeholder="price">
+      <span class="lbl">$/L</span>
+      <span class="out" id="calc-out"></span>
+    </div>
+    <div class="fx-line" id="calc-fx"></div>
+  </div>
+
+  <p class="src">Average of CRE (Mexico's energy regulator) station prices nearby, pesos per liter. Updated twice a day. Tap a fuel to use its price.</p>
+</section>
+<div class="foot"><a data-track="kofi" href="https://ko-fi.com/jasonhite" target="_blank" rel="noopener">☕ Tip</a> · <a data-track="more_apps" href="index.html#more">⚓ More apps</a></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const PV = { lat: 20.65, lon: -105.24 };
+const RADII_KM = [22, 50, 100]; // widen until at least MIN_STATIONS sell regular
+const MIN_STATIONS = 3;
+const L_PER_GAL = 3.78541;
+const LOC_KEY = "cambio-gas-loc", TANK_KEY = "cambio-tank-l";
+
+let GAS = null;       // data/gas.json
+const FX = {};        // { usd, cad } pesos per unit
+let PICKED = null;    // fuel whose price feeds the calculator
+
+const money = v => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function km(a, b) {
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+}
+
+function savedLoc() {
+  try {
+    const l = JSON.parse(localStorage.getItem(LOC_KEY) || "null");
+    return l && isFinite(l.lat) && isFinite(l.lon) ? l : null;
+  } catch (e) { return null; }
+}
+
+// Average each fuel over stations within the smallest radius that has enough of them.
+function averages(at) {
+  const withDist = GAS.s.map(s => [km(at, { lat: s[0], lon: s[1] }), s]);
+  for (const r of RADII_KM) {
+    const near = withDist.filter(([d]) => d <= r).map(([, s]) => s);
+    if (near.filter(s => s[2] != null).length >= MIN_STATIONS || r === RADII_KM.at(-1)) {
+      const avg = i => { const v = near.map(s => s[i]).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+      return { r, n: near.length, regular: avg(2), premium: avg(3), diesel: avg(4) };
+    }
+  }
+}
+
+function render() {
+  if (!GAS) return;
+  const loc = savedLoc();
+  const a = averages(loc || PV);
+  $("btn-pv").hidden = !loc;
+  const placeName = loc ? "Near you" : "Puerto Vallarta";
+  $("where").textContent = a.n
+    ? `${placeName} · ${a.n} station${a.n === 1 ? "" : "s"} within ${a.r} km`
+    : `${placeName} · no stations within ${a.r} km`;
+  if (!a.n) {
+    $("gas-row").innerHTML = '<div class="empty" style="grid-column: 1 / -1">No stations nearby. Tap PV, or try 📍 again somewhere in Mexico.</div>';
+    return;
+  }
+  const box = (key, name, mxnL) => {
+    const usdGal = FX.usd && mxnL != null ? mxnL * L_PER_GAL / FX.usd : null;
+    const cadL = FX.cad && mxnL != null ? mxnL / FX.cad : null;
+    return `<button class="gas-box${PICKED === key ? " picked" : ""}" data-fuel="${key}" data-price="${mxnL != null ? mxnL.toFixed(2) : ""}">` +
+      `<span class="gas-name">${name}</span>` +
+      `<span class="gas-mxn">🇲🇽 ${mxnL != null ? "$" + money(mxnL) : "—"} <small>/L</small></span>` +
+      `<span class="gas-fx">🇺🇸 ${usdGal != null ? "$" + money(usdGal) : "—"} <small>/gal</small></span>` +
+      `<span class="gas-fx">🇨🇦 ${cadL != null ? "C$" + money(cadL) : "—"} <small>/L</small></span></button>`;
+  };
+  $("gas-row").innerHTML = box("regular", "Magna", a.regular) + box("premium", "Premium", a.premium) + box("diesel", "Diesel", a.diesel);
+  // keep the calculator in step when the location changes
+  if (PICKED) {
+    const p = $("gas-row").querySelector(`[data-fuel="${PICKED}"]`)?.dataset.price;
+    if (p) { $("calc-price").value = p; calcGas(); }
+  }
+}
+
+$("gas-row").addEventListener("click", e => {
+  const b = e.target.closest(".gas-box");
+  if (!b || !b.dataset.price) return;
+  PICKED = b.dataset.fuel;
+  $("calc-price").value = b.dataset.price;
+  render();
+  calcGas();
+});
+
+$("btn-loc").addEventListener("click", () => {
+  $("note").textContent = "";
+  if (!navigator.geolocation) { $("note").textContent = "This browser can't share location — showing Puerto Vallarta."; return; }
+  $("btn-loc").disabled = true;
+  $("where").textContent = "Finding you…";
+  navigator.geolocation.getCurrentPosition(pos => {
+    $("btn-loc").disabled = false;
+    try { localStorage.setItem(LOC_KEY, JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude })); } catch (e) {}
+    render();
+  }, err => {
+    $("btn-loc").disabled = false;
+    $("note").textContent = err.code === err.PERMISSION_DENIED
+      ? "Location blocked — showing Puerto Vallarta. Allow location for this site in your browser settings to use 📍."
+      : "Couldn't get your location — showing Puerto Vallarta.";
+    render();
+  }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 });
+});
+
+$("btn-pv").addEventListener("click", () => {
+  try { localStorage.removeItem(LOC_KEY); } catch (e) {}
+  $("note").textContent = "";
+  render();
+});
+
+// Total = liters × price, plus gallons and the total in USD and CAD.
+function calcGas() {
+  const qty = parseFloat($("calc-qty").value), price = parseFloat($("calc-price").value);
+  if (isFinite(qty) && qty > 0 && isFinite(price) && price > 0) {
+    const total = qty * price;
+    $("calc-out").textContent = `= $${money(total)}`;
+    $("calc-fx").textContent = `${(qty / L_PER_GAL).toFixed(2)} gal · 🇺🇸 ${FX.usd ? "US$" + money(total / FX.usd) : "—"} · 🇨🇦 ${FX.cad ? "C$" + money(total / FX.cad) : "—"}`;
+  } else {
+    $("calc-out").textContent = "";
+    $("calc-fx").textContent = "";
+  }
+}
+$("calc-qty").addEventListener("input", calcGas);
+$("calc-price").addEventListener("input", () => { PICKED = null; render(); calcGas(); });
+
+// Fuel tank: size (saved locally) × empty share of the gauge = liters to fill.
+// Moving the gauge also puts that amount into the calculator.
+function calcTank(fillQty) {
+  const size = parseFloat($("tank-size").value), lvl = +$("tank-level").value;
+  $("tank-level").style.setProperty("--lvl", lvl + "%");
+  if (!(isFinite(size) && size > 0)) { $("tank-need").textContent = `${lvl}%`; return; }
+  const need = size * (100 - lvl) / 100;
+  $("tank-need").textContent = `${lvl}% · need ${need.toFixed(1)} L`;
+  if (fillQty) { $("calc-qty").value = need.toFixed(1); calcGas(); }
+}
+try { $("tank-size").value = localStorage.getItem(TANK_KEY) || ""; } catch (e) {}
+$("tank-size").addEventListener("input", () => {
+  try { localStorage.setItem(TANK_KEY, $("tank-size").value); } catch (e) {}
+  calcTank(false);
+});
+$("tank-level").addEventListener("input", () => calcTank(true));
+calcTank(false);
+
+// Rates: newest of fx_live.js (pv-fx repo) and open.er-api.com; both are USD-based.
+async function loadFX() {
+  const cands = [];
+  try {
+    const txt = await (await fetch("https://raw.githubusercontent.com/captjasonhite/pv-fx/main/fx_live.js", { cache: "no-store" })).text();
+    const m = txt.match(/window\.FX_LIVE\s*=\s*(\{[\s\S]*?\})\s*;/);
+    const l = m && JSON.parse(m[1]);
+    if (l?.t && l.mxn && l.cad) cands.push({ t: l.t, mxn: l.mxn, cad: l.cad });
+  } catch (e) {}
+  try {
+    const er = await (await fetch("https://open.er-api.com/v6/latest/USD")).json();
+    if (er?.result === "success" && er.rates.MXN && er.rates.CAD) {
+      cands.push({ t: Date.parse(er.time_last_update_utc) || 0, mxn: er.rates.MXN, cad: er.rates.CAD });
+    }
+  } catch (e) {}
+  cands.sort((a, b) => b.t - a.t);
+  if (cands[0]) { FX.usd = cands[0].mxn; FX.cad = cands[0].mxn / cands[0].cad; }
+}
+
+async function loadGas() {
+  try {
+    const r = await fetch("data/gas.json", { cache: "no-cache" });
+    if (!r.ok) throw new Error(r.status);
+    GAS = await r.json();
+    const ageH = (Date.now() - GAS.t) / 36e5;
+    if (ageH >= 36) {
+      $("stale").hidden = false;
+      $("stale").textContent = "⚠ " + Math.round(ageH / 24) + "d old";
+      $("stale").title = "Prices from " + GAS.date + " — the daily update hasn't run since";
+    }
+  } catch (e) {
+    $("gas-row").innerHTML = '<div class="empty" style="grid-column: 1 / -1">Gas prices unavailable right now.</div>';
+    $("where").textContent = "Puerto Vallarta";
+  }
+}
+
+Promise.allSettled([loadGas(), loadFX()]).then(() => { render(); calcGas(); });
+</script>
+</body>
+</html>

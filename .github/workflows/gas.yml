@@ -1,0 +1,29 @@
+name: update-gas
+
+on:
+  schedule:
+    - cron: "0 14,22 * * *"   # 08:00 and 16:00 CDMX
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch CRE gas prices
+        run: python3 scripts/fetch_gas.py
+      - name: Commit if changed
+        run: |
+          git config user.name "cambio-gas-bot"
+          git config user.email "cambio-gas-bot@users.noreply.github.com"
+          if ! git diff --quiet data/gas.json; then
+            git add data/gas.json
+            git commit -m "gas prices $(date -u +%Y-%m-%d)"
+            git pull --rebase
+            git push
+          else
+            echo "no change"
+          fi
