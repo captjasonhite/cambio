@@ -1,5 +1,5 @@
 {
-  "name": "Cambio Gas Prices",
+  "name": "Cambio Fuel Prices/Calc",
   "short_name": "Cambio Gas",
   "start_url": "gas.html",
   "scope": "./",

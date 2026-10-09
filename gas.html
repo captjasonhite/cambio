@@ -12,7 +12,7 @@
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="Cambio Gas">
-<title>Gas Prices</title>
+<title>Fuel Prices/Calc</title>
 <style>
   :root {
     --bg: #0a0d12;
@@ -138,7 +138,7 @@
 
 <section class="card">
   <div class="card-head">
-    <div><h2>⛽ Gas prices</h2><p class="sub" id="where">Puerto Vallarta · loading…</p></div>
+    <div><h2>⛽ Fuel Prices/Calc</h2><p class="sub" id="where">Puerto Vallarta · loading…</p></div>
     <div class="head-right">
       <span class="badge" id="stale" hidden></span>
       <button class="btn" id="btn-pv" data-track="gas_pv" hidden>PV</button>
@@ -340,7 +340,7 @@ async function loadGas() {
       $("stale").title = "Prices from " + GAS.date + " — the daily update hasn't run since";
     }
   } catch (e) {
-    $("gas-row").innerHTML = '<div class="empty" style="flex: 1">Gas prices unavailable right now.</div>';
+    $("gas-row").innerHTML = '<div class="empty" style="flex: 1">Fuel prices unavailable right now.</div>';
     $("where").textContent = "Puerto Vallarta";
   }
 }
