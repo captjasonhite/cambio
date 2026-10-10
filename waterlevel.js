@@ -30,8 +30,6 @@
   .wl-now { display: flex; align-items: baseline; gap: 8px; }
   .wl-val { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .wl-unit { color: var(--muted); font-size: 0.8rem; }
-  .wl-mini { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .wl-mini b { color: var(--text); font-weight: 600; }
   .wl-chart { position: relative; height: 190px; width: 100%; min-width: 0; overflow: hidden; }
   .wl table { width: 100%; border-collapse: collapse; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
   .wl th { color: var(--muted); font-weight: 600; text-align: right; padding: 3px 4px; font-size: 0.7rem; }
@@ -154,7 +152,6 @@
     const pv = gauges.puert;
     const sel = gauges[prefs.gauge] ? prefs.gauge : (pv ? "puert" : "mnza");
     const g = gauges[sel];
-    const other = sel === "puert" ? "mnza" : "puert";
 
     let badge = '<span class="wl-badge flat">normal</span>';
     if (pv && pv.now >= 0.3) badge = '<span class="wl-badge red">HIGH WATER</span>';
@@ -168,10 +165,6 @@
     root.innerHTML = `<div class="wl">
       ${st.opts.ctrlEl ? "" : `<div class="wl-head"><h2>Water Level</h2>${bar}</div>`}
       <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above normal at ${GAUGES[sel].short}${stale}</span>${badge}</div>
-      <div class="wl-mini">
-        <span>compare ${GAUGES[other].short} <b>${gauges[other] ? off(gauges[other].now) + " " + offU() : "offline"}</b></span>
-        <span>low-pressure rise, 48 h <b>${rows.length ? off(Math.max(...rows.map(r => r.ib))) + " " + offU() : "—"}</b></span>
-      </div>
       <div class="wl-chart"><canvas></canvas></div>
       <table>
         <tr><th>next highs (PV)</th><th>normal</th><th>est. still water</th></tr>
