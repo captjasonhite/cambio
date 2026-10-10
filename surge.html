@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0d12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="surge.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Water Level">
+<title>Water Level</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0d12;
+    --card: #12161e;
+    --card-edge: #1e2530;
+    --text: #e6ebf2;
+    --muted: #7b8698;
+    --cyan: #22d3ee;
+    --amber: #fbbf24;
+    --green: #4ade80;
+    --red: #f87171;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { min-height: 100%; overflow-x: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    padding: calc(12px + var(--safe-top)) 14px calc(14px + var(--safe-bottom));
+    -webkit-tap-highlight-color: transparent;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--card-edge); border-radius: 18px;
+    padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 12px;
+    max-width: 520px; width: 100%; min-width: 0; margin: 0 auto;
+  }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .card-head > div:first-child { min-width: 0; }
+  .card-head h2 { font-size: 1.15rem; }
+  .sub { color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
+  .head-right { display: flex; gap: 6px; align-items: center; flex: none; }
+  .foot { text-align: center; font-size: 0.8rem; color: var(--muted); padding-top: 10px; }
+  .foot a { color: var(--muted); text-decoration: none; }
+</style>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-T83CQZCHBZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-T83CQZCHBZ');
+  // one "link_click" event per tap on anything marked data-track
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-track]');
+    if (el) gtag('event', 'link_click', { link_name: el.dataset.track, link_url: el.href || '', page: location.pathname });
+  });
+</script>
+</head>
+<body>
+
+<section class="card">
+  <div class="card-head">
+    <div><h2>🌊 Water Level</h2><p class="sub">Bahía de Banderas · above the normal tide</p></div>
+    <div class="head-right">
+      <span id="water-badge"></span>
+      <button id="menu-btn" title="Menu" aria-label="Menu">☰</button>
+    </div>
+  </div>
+  <div id="water-root"><p class="sub">loading…</p></div>
+</section>
+<div class="foot"><a data-track="kofi" href="https://ko-fi.com/jasonhite" target="_blank" rel="noopener">☕ Tip</a> · <a data-track="more_apps" href="index.html#more">⚓ More apps</a></div>
+<script src="nav.js"></script>
+<script src="waterlevel.js"></script>
+<script>
+// reload the storm/tide-fit data each time so the 15-min Actions updates show up
+function refresh() {
+  const s = document.createElement("script");
+  s.src = "data/surge.js?t=" + Date.now();
+  const go = () => { s.remove(); WaterLevel.render(document.getElementById("water-root"), { badgeEl: document.getElementById("water-badge") }); };
+  s.onload = go; s.onerror = go;
+  document.head.appendChild(s);
+}
+refresh();
+setInterval(refresh, 10 * 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+</script>
+</body>
+</html>
