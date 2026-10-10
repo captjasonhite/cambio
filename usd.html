@@ -196,6 +196,7 @@
   <button data-days="30">1M</button>
   <button data-days="182">6M</button>
   <button data-days="365">1Y</button>
+  <button id="menu-btn" title="Menu" aria-label="Menu">☰</button>
 </div>
 
 <section class="card" id="card-mxn">
@@ -234,6 +235,7 @@
   </div>
 </section>
 <div class="foot"><a data-track="kofi" href="https://ko-fi.com/jasonhite" target="_blank" rel="noopener">☕ Tip</a> · <a data-track="more_apps" href="index.html#more">⚓ More apps</a></div>
+<script src="nav.js"></script>
 
 <script>
 let RANGE_DAYS = +localStorage.getItem("pv-range") || 182;
@@ -583,14 +585,14 @@ convAmt.addEventListener("input", convUpdate);
 
 // ---------- range buttons ----------
 document.getElementById("ranges").addEventListener("click", e => {
-  const btn = e.target.closest("button");
+  const btn = e.target.closest("button[data-days]");
   if (!btn) return;
   RANGE_DAYS = parseInt(btn.dataset.days, 10);
   localStorage.setItem("pv-range", RANGE_DAYS);
-  document.querySelectorAll("#ranges button").forEach(b => b.classList.toggle("active", b === btn));
+  document.querySelectorAll("#ranges button[data-days]").forEach(b => b.classList.toggle("active", b === btn));
   renderFX();
 });
-document.querySelectorAll("#ranges button").forEach(b => b.classList.toggle("active", +b.dataset.days === RANGE_DAYS));
+document.querySelectorAll("#ranges button[data-days]").forEach(b => b.classList.toggle("active", +b.dataset.days === RANGE_DAYS));
 
 renderFX();
 setInterval(renderFX, 15 * 60 * 1000); // auto-refresh every 15 min
