@@ -43,6 +43,7 @@
   document.head.appendChild(css);
 
   const pad = n => String(n).padStart(2, "0");
+  const esc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const when = t => { const d = new Date(t); return DOW[d.getDay()] + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); };
   const pref = (k, ok, d) => { try { const v = localStorage.getItem(k); return ok.includes(v) ? v : d; } catch (e) { return d; } };
@@ -136,7 +137,12 @@
     ]);
     const base = puert ? puert.now : 0;
     const up = Math.max(base, mnza ? mnza.now : base);
-    const rows = highs(S.gauges.puert, speeds).slice(0, 4).map(h => {
+    const marks = highs(S.gauges.puert, speeds).slice(0, 4);
+    // NHC forecast closest approach, slotted in time order (normal tide at that moment)
+    const sT = S.storm?.closest ? Date.parse(S.storm.closest.t) : NaN;
+    if (sT > Date.now() && sT < Date.now() + 48 * H) marks.push({ t: sT, tide: tideAt(S.gauges.puert, speeds, sT) - S.gauges.puert.mllw, storm: S.storm.name });
+    marks.sort((a, b) => a.t - b.t);
+    const rows = marks.map(h => {
       const ib = Math.max(-0.15, drop(h.t) / 100); // ~1 cm per hPa
       return { ...h, ib, lo: h.tide + base + ib, hi: h.tide + up + ib };
     });
@@ -158,7 +164,7 @@
     if (pv && pv.now >= 0.3) badge = '<span class="wl-badge red">HIGH WATER</span>';
     else if (pv && pv.now >= 0.15) badge = '<span class="wl-badge amber">ABOVE NORMAL</span>';
     const stale = g && Date.now() - g.last > 2 * H ? ` · <span class="error">gauge ${Math.round((Date.now() - g.last) / H)} h old</span>` : "";
-    const top = Math.max(...rows.map(r => r.tide));
+    const top = Math.max(...rows.filter(r => !r.storm).map(r => r.tide));
     const tog = (name, items, cur) => `<div class="wl-tog" data-k="${name}">${items.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
 
     const bar = `<div class="wl-bar">${tog("gauge", [["puert", "PV"], ["mnza", "Manz"]], sel)}${tog("unit", [["ft", "ft"], ["m", "m"]], prefs.unit)}</div>`;
@@ -169,7 +175,7 @@
       <div class="wl-chart"><canvas></canvas></div>
       <table>
         <tr><th>next highs (PV)</th><th>normal</th><th>est. still water</th></tr>
-        ${rows.map(r => `<tr><td>${when(r.t)}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
+        ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${when(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} arrival` : ""}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
       </table>
       ${(() => { const st = window.SURGE_DATA.storm; return st ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${st.advisory}): ${st.name} ${st.closest.km < 5 ? "is over Banderas Bay" : "passes closest to Banderas Bay"} ~<b>${when(Date.parse(st.closest.t))}</b>${st.closest.km < 5 ? "" : `, ~${st.closest.km} km away`} — red line on the graph. Track error at 1–2 days is tens of km.</p>` : ""; })()}
       <p class="wl-note">Heights above low-water datum (from the PV gauge). Estimate = normal tide + PV now (low) or Manzanillo now (high, it led PV by ~1 day last time) + forecast pressure drop. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
