@@ -205,8 +205,8 @@
     const hr = i => new Date(all[i].t).getHours();
     const mark = i => (i > 0 && hr(i) !== hr(i - 1) && (hr(i) === 0 || hr(i) === 12) ? hr(i) : null);
     const color = GAUGES[sel].color;
-    // NHC forecast: when the storm passes closest to Banderas Bay
-    const sc = window.SURGE_DATA.storm?.closest;
+    // NHC forecast: when the storm passes closest to the selected gauge's area
+    const sc = window.SURGE_DATA.storm?.closest_by?.[sel] ?? (sel === "puert" ? window.SURGE_DATA.storm?.closest : null);
     const sT = sc ? Date.parse(sc.t) : NaN;
     const stormIdx = sT > all[0].t && sT < all[all.length - 1].t ? all.findIndex(p => p.t >= sT) : -1;
     const vline = (c, i, color, text, row) => {

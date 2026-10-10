@@ -109,6 +109,8 @@ def tides(prev):
 
 
 BAY = (20.68, -105.40)  # middle of Banderas Bay (approx.)
+# where to measure the storm's closest pass for each gauge's graph
+NEAR = {"puert": BAY, "mnza": (19.06, -104.30)}  # Manzanillo gauge
 
 
 def km(a, b):
@@ -156,18 +158,22 @@ def storm():
         track.append((when(m.group(1), m.group(2)), *ll(m.group(3), m.group(4))))
     if len(track) < 2:
         return None
-    close = None
-    for (t0, la0, lo0), (t1, la1, lo1) in zip(track, track[1:]):
-        for i in range(61):
-            f = i / 60
-            d = km(BAY, (la0 + (la1 - la0) * f, lo0 + (lo1 - lo0) * f))
-            if close is None or d < close[0]:
-                close = (d, t0 + (t1 - t0) * f)
+
+    def closest(pt):
+        best = None
+        for (t0, la0, lo0), (t1, la1, lo1) in zip(track, track[1:]):
+            for i in range(61):
+                f = i / 60
+                d = km(pt, (la0 + (la1 - la0) * f, lo0 + (lo1 - lo0) * f))
+                if best is None or d < best[0]:
+                    best = (d, t0 + (t1 - t0) * f)
+        return {"t": best[1].isoformat(timespec="minutes"), "km": round(best[0])}
     return {
         "name": s["name"], "class": s["classification"], "advisory": adv.group(1) if adv else None,
         "updated": s["lastUpdate"],
         "track": [{"t": a.isoformat(), "lat": b, "lon": c} for a, b, c in track],
-        "closest": {"t": close[1].isoformat(timespec="minutes"), "km": round(close[0])},
+        "closest": closest(BAY),
+        "closest_by": {code: closest(pt) for code, pt in NEAR.items()},
     }
 
 
