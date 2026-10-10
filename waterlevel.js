@@ -167,9 +167,9 @@
     if (st.opts.ctrlEl) st.opts.ctrlEl.innerHTML = bar;
     root.innerHTML = `<div class="wl">
       ${st.opts.ctrlEl ? "" : `<div class="wl-head"><h2>Water Level</h2>${bar}</div>`}
-      <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above normal tide${stale}</span>${badge}</div>
+      <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above normal at ${GAUGES[sel].short}${stale}</span>${badge}</div>
       <div class="wl-mini">
-        <span>${GAUGES[other].short} <b>${gauges[other] ? off(gauges[other].now) + " " + offU() : "offline"}</b></span>
+        <span>compare ${GAUGES[other].short} <b>${gauges[other] ? off(gauges[other].now) + " " + offU() : "offline"}</b></span>
         <span>low-pressure rise, 48 h <b>${rows.length ? off(Math.max(...rows.map(r => r.ib))) + " " + offU() : "—"}</b></span>
       </div>
       <div class="wl-chart"><canvas></canvas></div>
