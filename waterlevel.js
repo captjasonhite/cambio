@@ -2,8 +2,8 @@
 // and an outlook for the next high tides.
 // Shared by the PV dashboard and cambio. Needs Chart.js and window.SURGE_DATA
 // (tide fits written by scripts/fetch_surge.py).
-//   WaterLevel.render(rootEl, { badgeEl })  -> fetches live gauge data and draws the tile
-//   (with badgeEl the caller supplies the header and the status badge goes there)
+//   WaterLevel.render(rootEl, { ctrlEl })  -> fetches live gauge data and draws the tile
+//   (with ctrlEl the caller supplies the header and the PV/Manz + ft/m toggles go there)
 (() => {
   const IOC = "https://www.ioc-sealevelmonitoring.org/service.php";
   const BUC = { lat: 20.756, lon: -105.334 };
@@ -13,21 +13,21 @@
   const css = document.createElement("style");
   css.textContent = `
   .wl { display: flex; flex-direction: column; gap: 10px; min-width: 0; width: 100%; }
-  .wl-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .wl-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .wl-head h2 { font-size: 0.85rem; font-weight: 600; }
   .wl-sub { color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
-  .wl-badge { font-size: 0.72rem; font-weight: 700; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+  .wl-badge { font-size: 0.72rem; font-weight: 700; padding: 4px 9px; border-radius: 999px; white-space: nowrap; margin-left: auto; align-self: center; }
   .wl-badge.red   { color: var(--red);   background: rgba(248, 113, 113, 0.14); }
   .wl-badge.amber { color: var(--amber); background: rgba(251, 191, 36, 0.12); }
   .wl-badge.flat  { color: var(--muted); background: rgba(123, 134, 152, 0.12); }
-  .wl-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .wl-bar { display: flex; gap: 6px; flex: none; }
   .wl-tog { display: inline-flex; border: 1px solid #1e2530; border-radius: 10px; overflow: hidden; }
   .wl-tog button {
-    background: transparent; color: var(--muted); border: none; padding: 8px 12px;
-    font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; touch-action: manipulation;
+    background: transparent; color: var(--muted); border: none; padding: 7px 8px;
+    font: inherit; font-size: 0.74rem; font-weight: 700; cursor: pointer; touch-action: manipulation;
   }
   .wl-tog button.on { background: #1a2230; color: var(--text); }
-  .wl-now { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .wl-now { display: flex; align-items: baseline; gap: 8px; }
   .wl-val { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .wl-unit { color: var(--muted); font-size: 0.8rem; }
   .wl-mini { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -163,11 +163,11 @@
     const top = Math.max(...rows.map(r => r.tide));
     const tog = (name, items, cur) => `<div class="wl-tog" data-k="${name}">${items.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
 
-    if (st.opts.badgeEl) st.opts.badgeEl.innerHTML = badge;
+    const bar = `<div class="wl-bar">${tog("gauge", [["puert", "PV"], ["mnza", "Manz"]], sel)}${tog("unit", [["ft", "ft"], ["m", "m"]], prefs.unit)}</div>`;
+    if (st.opts.ctrlEl) st.opts.ctrlEl.innerHTML = bar;
     root.innerHTML = `<div class="wl">
-      ${st.opts.badgeEl ? "" : `<div class="wl-head"><div><h2>Water Level · Bahía de Banderas</h2><div class="wl-sub">sea level vs normal tide for the season · IOC gauges</div></div>${badge}</div>`}
-      <div class="wl-bar">${tog("gauge", [["puert", "PV"], ["mnza", "Manz"]], sel)}${tog("unit", [["m", "m"], ["ft", "ft"]], prefs.unit)}</div>
-      <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} · ${sel === "puert" ? "Puerto Vallarta" : "Manzanillo"} gauge, 3 h avg${stale}</span></div>
+      ${st.opts.ctrlEl ? "" : `<div class="wl-head"><h2>Water Level</h2>${bar}</div>`}
+      <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above normal tide${stale}</span>${badge}</div>
       <div class="wl-mini">
         <span>${GAUGES[other].short} <b>${gauges[other] ? off(gauges[other].now) + " " + offU() : "offline"}</b></span>
         <span>low-pressure rise, 48 h <b>${rows.length ? off(Math.max(...rows.map(r => r.ib))) + " " + offU() : "—"}</b></span>
@@ -180,7 +180,8 @@
       <p class="wl-note">Heights above low-water datum (from the PV gauge). Estimate = normal tide + PV now (low) or Manzanillo now (high, it led PV by ~1 day last time) + forecast pressure drop. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
     </div>`;
 
-    root.querySelectorAll(".wl-tog").forEach(el => el.addEventListener("click", e => {
+    const togs = [...root.querySelectorAll(".wl-tog"), ...(st.opts.ctrlEl ? st.opts.ctrlEl.querySelectorAll(".wl-tog") : [])];
+    togs.forEach(el => el.addEventListener("click", e => {
       const b = e.target.closest("button");
       if (!b) return;
       prefs[el.dataset.k] = b.dataset.v;

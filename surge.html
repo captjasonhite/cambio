@@ -45,8 +45,7 @@
     max-width: 520px; width: 100%; min-width: 0; margin: 0 auto;
   }
   .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .card-head > div:first-child { min-width: 0; }
-  .card-head h2 { font-size: 1.15rem; }
+  .card-head h2 { font-size: 1.05rem; min-width: 0; }
   .sub { color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
   .head-right { display: flex; gap: 6px; align-items: center; flex: none; }
   .foot { text-align: center; font-size: 0.8rem; color: var(--muted); padding-top: 10px; }
@@ -69,9 +68,9 @@
 
 <section class="card">
   <div class="card-head">
-    <div><h2>🌊 Water Level</h2><p class="sub">Bahía de Banderas · above the normal tide</p></div>
+    <h2>Water Level</h2>
     <div class="head-right">
-      <span id="water-badge"></span>
+      <span id="water-ctrl"></span>
       <button id="menu-btn" title="Menu" aria-label="Menu">☰</button>
     </div>
   </div>
@@ -85,7 +84,7 @@
 function refresh() {
   const s = document.createElement("script");
   s.src = "data/surge.js?t=" + Date.now();
-  const go = () => { s.remove(); WaterLevel.render(document.getElementById("water-root"), { badgeEl: document.getElementById("water-badge") }); };
+  const go = () => { s.remove(); WaterLevel.render(document.getElementById("water-root"), { ctrlEl: document.getElementById("water-ctrl") }); };
   s.onload = go; s.onerror = go;
   document.head.appendChild(s);
 }
