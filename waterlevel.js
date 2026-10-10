@@ -174,7 +174,7 @@
       <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above normal at ${GAUGES[sel].short}${stale}</span>${badge}</div>
       <div class="wl-chart"><canvas></canvas></div>
       <table>
-        <tr><th>next highs (PV)</th><th>normal</th><th>est. still water</th></tr>
+        <tr><th>next highs (PV)</th><th>normal</th><th>estimated</th></tr>
         ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${when(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} arrival` : ""}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
       </table>
       ${(() => { const st = window.SURGE_DATA.storm; return st ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${st.advisory}): ${st.name} ${st.closest.km < 5 ? "is over Banderas Bay" : "passes closest to Banderas Bay"} ~<b>${when(Date.parse(st.closest.t))}</b>${st.closest.km < 5 ? "" : `, ~${st.closest.km} km away`} — red line on the graph. Track error at 1–2 days is tens of km.</p>` : ""; })()}
