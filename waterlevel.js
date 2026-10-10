@@ -7,6 +7,7 @@
 (() => {
   const IOC = "https://www.ioc-sealevelmonitoring.org/service.php";
   const BAY = { lat: 20.68, lon: -105.40 }; // middle of Banderas Bay (approx.)
+  const PLACE = { puert: { name: "Banderas Bay", lat: BAY.lat, lon: BAY.lon }, mnza: { name: "Manzanillo", lat: 19.06, lon: -104.30 } };
   const GAUGES = { puert: { short: "PV", color: "#22d3ee" }, mnza: { short: "Manz", color: "#fbbf24" } };
   const H = 3600e3, M_FT = 3.28084, CM_IN = 0.393701;
 
@@ -115,9 +116,9 @@
     return out;
   }
 
-  // forecast pressure change in Banderas Bay (model), hPa below now at a given time
-  async function pressureDrop() {
-    const j = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${BAY.lat}&longitude=${BAY.lon}&hourly=pressure_msl&forecast_days=3&timeformat=unixtime`);
+  // forecast pressure change at a place (model), hPa below now at a given time
+  async function pressureDrop(pl) {
+    const j = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${pl.lat}&longitude=${pl.lon}&hourly=pressure_msl&forecast_days=3&timeformat=unixtime`);
     const t = j.hourly.time.map(s => s * 1000), p = j.hourly.pressure_msl;
     const near = ms => t.reduce((best, x, i) => (Math.abs(x - ms) < Math.abs(t[best] - ms) ? i : best), 0);
     const i0 = near(Date.now());
@@ -130,22 +131,32 @@
     const S = window.SURGE_DATA;
     if (!S?.gauges?.puert) { root.innerHTML = '<div class="wl"><span class="error">no tide fit — run scripts/fetch_surge.py</span></div>'; return; }
     const speeds = Object.values(S.speeds);
-    const [puert, mnza, drop] = await Promise.all([
+    const [puert, mnza, dropBay, dropMz] = await Promise.all([
       gauge("puert", S.gauges.puert, speeds).catch(() => null),
       S.gauges.mnza ? gauge("mnza", S.gauges.mnza, speeds).catch(() => null) : null,
-      pressureDrop().catch(() => () => 0),
+      pressureDrop(PLACE.puert).catch(() => () => 0),
+      pressureDrop(PLACE.mnza).catch(() => () => 0),
     ]);
-    const base = puert ? puert.now : 0;
-    const up = Math.max(base, mnza ? mnza.now : base);
-    const marks = highs(S.gauges.puert, speeds).slice(0, 4);
-    // NHC forecast closest approach, slotted in time order (normal tide at that moment)
-    const sT = S.storm?.closest ? Date.parse(S.storm.closest.t) : NaN;
-    if (sT > Date.now() && sT < Date.now() + 48 * H) marks.push({ t: sT, tide: tideAt(S.gauges.puert, speeds, sT) - S.gauges.puert.mllw, storm: S.storm.name });
-    marks.sort((a, b) => a.t - b.t);
-    const rows = marks.map(h => {
-      const ib = Math.max(-0.15, drop(h.t) / 100); // ~1 cm per hPa
-      return { ...h, ib, lo: h.tide + base + ib, hi: h.tide + up + ib };
-    });
+    // next highs + the storm's closest pass, per gauge, in that gauge's own datum.
+    // PV's upper estimate uses Manzanillo's offset too (it led PV by ~1 day last time).
+    const table = (code, g, drop, lo, hi) => {
+      const fit = S.gauges[code];
+      if (!fit || !g) return [];
+      const marks = highs(fit, speeds).slice(0, 4);
+      const c = S.storm?.closest_by?.[code] ?? (code === "puert" ? S.storm?.closest : null);
+      const sT = c ? Date.parse(c.t) : NaN;
+      if (sT > Date.now() && sT < Date.now() + 48 * H) marks.push({ t: sT, tide: tideAt(fit, speeds, sT) - fit.mllw, storm: S.storm.name, km: c.km });
+      marks.sort((a, b) => a.t - b.t);
+      return marks.map(h => {
+        const ib = Math.max(-0.15, drop(h.t) / 100); // ~1 cm per hPa
+        return { ...h, ib, lo: h.tide + lo + ib, hi: h.tide + hi + ib };
+      });
+    };
+    const pvNow = puert ? puert.now : 0;
+    const rows = {
+      puert: table("puert", puert, dropBay, pvNow, Math.max(pvNow, mnza ? mnza.now : pvNow)),
+      mnza: table("mnza", mnza, dropMz, mnza?.now ?? 0, mnza?.now ?? 0),
+    };
     const st = state.get(root) || {};
     st.data = { gauges: { puert, mnza }, rows };
     st.opts = opts;
@@ -155,9 +166,10 @@
 
   function draw(root) {
     const st = state.get(root);
-    const { gauges, rows } = st.data;
+    const { gauges } = st.data;
     const pv = gauges.puert;
     const sel = gauges[prefs.gauge] ? prefs.gauge : (pv ? "puert" : "mnza");
+    const rows = st.data.rows[sel];
     const g = gauges[sel];
 
     let badge = '<span class="wl-badge flat">normal</span>';
@@ -174,11 +186,11 @@
       <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above normal at ${GAUGES[sel].short}${stale}</span>${badge}</div>
       <div class="wl-chart"><canvas></canvas></div>
       <table>
-        <tr><th>next highs (PV)</th><th>normal</th><th>estimated</th></tr>
-        ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${when(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} arrival` : ""}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
+        <tr><th>next highs (${GAUGES[sel].short})</th><th>normal</th><th>estimated</th></tr>
+        ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${when(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} ${r.km < 5 ? "arrival" : `closest ~${r.km} km`}` : ""}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
       </table>
-      ${(() => { const st = window.SURGE_DATA.storm; return st ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${st.advisory}): ${st.name} ${st.closest.km < 5 ? "is over Banderas Bay" : "passes closest to Banderas Bay"} ~<b>${when(Date.parse(st.closest.t))}</b>${st.closest.km < 5 ? "" : `, ~${st.closest.km} km away`} — red line on the graph. Track error at 1–2 days is tens of km.</p>` : ""; })()}
-      <p class="wl-note">Heights above low-water datum (from the PV gauge). Estimate = normal tide + PV now (low) or Manzanillo now (high, it led PV by ~1 day last time) + forecast pressure drop. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
+      ${(() => { const s = window.SURGE_DATA.storm, c = s?.closest_by?.[sel] ?? (sel === "puert" ? s?.closest : null), pl = PLACE[sel].name; return c ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${s.advisory}): ${s.name} ${c.km < 5 ? `is over ${pl}` : `passes closest to ${pl}`} ~<b>${when(Date.parse(c.t))}</b>${c.km < 5 ? "" : `, ~${c.km} km away`} — red line on the graph. Track error at 1–2 days is tens of km.</p>` : ""; })()}
+      <p class="wl-note">Heights above low-water datum (from the ${sel === "puert" ? "PV" : "Manzanillo"} gauge). Estimate = normal tide + ${sel === "puert" ? "PV's extra water now (low) or Manzanillo's (high, it led PV by ~1 day last time)" : "Manzanillo's extra water now"} + forecast pressure drop. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
     </div>`;
 
     const togs = [...root.querySelectorAll(".wl-tog"), ...(st.opts.ctrlEl ? st.opts.ctrlEl.querySelectorAll(".wl-tog") : [])];
