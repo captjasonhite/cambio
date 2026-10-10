@@ -1,6 +1,6 @@
 {
-  "name": "Cambio Water Level",
-  "short_name": "Water Level",
+  "name": "Simon Storm Surge",
+  "short_name": "Storm Surge",
   "start_url": "surge.html",
   "scope": "./",
   "id": "surge.html",

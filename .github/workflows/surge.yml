@@ -2,7 +2,7 @@ name: update-surge
 
 on:
   schedule:
-    - cron: "30 12 * * *"   # 06:30 CDMX — daily tide refit
+    - cron: "*/30 * * * *"   # NHC track (new advisory every 6 h); tide refit once a day
   workflow_dispatch: {}
 
 permissions:
@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install numpy
         run: python3 -m pip install --quiet numpy
-      - name: Refit tides
+      - name: NHC track + daily tide refit
         run: python3 scripts/fetch_surge.py data
       - name: Commit if changed
         run: |
@@ -23,7 +23,7 @@ jobs:
           git config user.email "cambio-surge-bot@users.noreply.github.com"
           if ! git diff --quiet data/surge.json; then
             git add data/surge.json data/surge.js
-            git commit -m "tide fit $(date -u +%Y-%m-%d)"
+            git commit -m "storm surge data $(date -u +%Y-%m-%dT%H:%M)"
             git pull --rebase
             git push
           else

@@ -15,6 +15,7 @@
   .wl { display: flex; flex-direction: column; gap: 10px; min-width: 0; width: 100%; }
   .wl-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .wl-head h2 { font-size: 0.85rem; font-weight: 600; }
+  .wl-exp { display: inline-block; vertical-align: middle; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; color: var(--amber); border: 1px solid var(--amber); border-radius: 6px; padding: 1px 5px; margin-left: 4px; }
   .wl-sub { color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
   .wl-badge { font-size: 0.72rem; font-weight: 700; padding: 4px 9px; border-radius: 999px; white-space: nowrap; margin-left: auto; align-self: center; }
   .wl-badge.red   { color: var(--red);   background: rgba(248, 113, 113, 0.14); }
@@ -97,7 +98,7 @@
     // next 48 h of normal tide, same 10-min grid
     const future = [];
     for (let t = last + 600e3; t < Date.now() + 48 * H; t += 600e3) future.push({ t, pred: tideAt(g, speeds, t) - g.mllw });
-    return { pts, future, last, now: pts[pts.length - 1].avg ?? pts[pts.length - 1].res };
+    return { pts, future, last, now: pts[pts.length - 1].avg ?? pts[pts.length - 1].res, predAt: t => tideAt(g, speeds, t) - g.mllw };
   }
 
   // normal high tides (PV fit) in the next 48 h, metres above the fit's MLLW
@@ -163,13 +164,14 @@
     const bar = `<div class="wl-bar">${tog("gauge", [["puert", "PV"], ["mnza", "Manz"]], sel)}${tog("unit", [["ft", "ft"], ["m", "m"]], prefs.unit)}</div>`;
     if (st.opts.ctrlEl) st.opts.ctrlEl.innerHTML = bar;
     root.innerHTML = `<div class="wl">
-      ${st.opts.ctrlEl ? "" : `<div class="wl-head"><h2>Water Level</h2>${bar}</div>`}
+      ${st.opts.ctrlEl ? "" : `<div class="wl-head"><h2>Simon Storm Surge <span class="wl-exp">EXPERIMENTAL</span></h2>${bar}</div>`}
       <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above normal at ${GAUGES[sel].short}${stale}</span>${badge}</div>
       <div class="wl-chart"><canvas></canvas></div>
       <table>
         <tr><th>next highs (PV)</th><th>normal</th><th>est. still water</th></tr>
         ${rows.map(r => `<tr><td>${when(r.t)}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
       </table>
+      ${(() => { const st = window.SURGE_DATA.storm; return st ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${st.advisory}): ${st.name} passes closest to Bucerías ~<b>${when(Date.parse(st.closest.t))}</b>, ~${st.closest.km} km away — red line on the graph. Track error at 1–2 days is tens of km.</p>` : ""; })()}
       <p class="wl-note">Heights above low-water datum (from the PV gauge). Estimate = normal tide + PV now (low) or Manzanillo now (high, it led PV by ~1 day last time) + forecast pressure drop. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
     </div>`;
 
@@ -188,19 +190,32 @@
     // normal + today's offset. The gap between the lines is the extra water.
     const k = prefs.unit === "ft" ? M_FT : 1;
     const r2 = v => (v == null ? null : Math.round(v * k * 100) / 100);
-    const past = g.pts.filter(p => p.t > g.last - 48 * H);
-    const all = [...past, ...g.future];
-    const nowIdx = past.length - 1;
+    // even 10-min grid (gauge gaps stay empty) so spacing on the axis is real time
+    const obs = new Map(g.pts.map(p => [p.t, p.obs]));
+    const all = [];
+    for (let t = g.last - 48 * H; t <= g.future[g.future.length - 1].t; t += 600e3) all.push({ t, obs: obs.get(t) ?? null, pred: g.predAt(t) });
+    const nowIdx = all.findIndex(p => p.t >= g.last);
     // grid marks: midnight (day name) and noon, at the first 10-min bin of that hour
     const hr = i => new Date(all[i].t).getHours();
     const mark = i => (i > 0 && hr(i) !== hr(i - 1) && (hr(i) === 0 || hr(i) === 12) ? hr(i) : null);
     const color = GAUGES[sel].color;
+    // NHC forecast: when the storm passes closest to Bucerías
+    const sc = window.SURGE_DATA.storm?.closest;
+    const sT = sc ? Date.parse(sc.t) : NaN;
+    const stormIdx = sT > all[0].t && sT < all[all.length - 1].t ? all.findIndex(p => p.t >= sT) : -1;
+    const vline = (c, i, color, text, row) => {
+      const x = c.scales.x.getPixelForValue(i), { top, bottom, right } = c.chartArea, ctx = c.ctx;
+      ctx.save(); ctx.strokeStyle = color; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+      ctx.fillStyle = color; ctx.font = "bold 10px sans-serif";
+      const w = ctx.measureText(text).width;
+      ctx.fillText(text, x + 3 + w > right ? x - 3 - w : x + 3, top + 10 + row * 12); ctx.restore();
+    };
     const nowLine = {
       id: "wlNow",
       afterDatasetsDraw(c) {
-        const x = c.scales.x.getPixelForValue(nowIdx), { top, bottom } = c.chartArea, ctx = c.ctx;
-        ctx.save(); ctx.strokeStyle = "#c9d1dc"; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
-        ctx.fillStyle = "#e6ebf2"; ctx.font = "bold 10px sans-serif"; ctx.fillText("now", x + 3, top + 9); ctx.restore();
+        vline(c, nowIdx, "#e6ebf2", "now", 0);
+        if (stormIdx >= 0) vline(c, stormIdx, "#f87171", `${window.SURGE_DATA.storm.name} ~${sc.km} km`, 1);
       },
     };
     st.chart = new Chart(root.querySelector("canvas").getContext("2d"), {
@@ -215,7 +230,7 @@
       },
       plugins: [nowLine],
       options: {
-        responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+        responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: "index", intersect: false },
         plugins: {
           legend: { display: true, position: "top", align: "start", labels: { boxWidth: 14, boxHeight: 3, padding: 8, color: "#d5dbe4", font: { size: 11, weight: "600" } } },
