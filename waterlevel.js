@@ -198,13 +198,16 @@
     const past = g.pts.filter(p => p.t > g.last - 48 * H);
     const all = [...past, ...g.future];
     const nowIdx = past.length - 1;
+    // grid marks: midnight (day name) and noon, at the first 10-min bin of that hour
+    const hr = i => new Date(all[i].t).getHours();
+    const mark = i => (i > 0 && hr(i) !== hr(i - 1) && (hr(i) === 0 || hr(i) === 12) ? hr(i) : null);
     const color = GAUGES[sel].color;
     const nowLine = {
       id: "wlNow",
       afterDatasetsDraw(c) {
         const x = c.scales.x.getPixelForValue(nowIdx), { top, bottom } = c.chartArea, ctx = c.ctx;
-        ctx.save(); ctx.strokeStyle = "#5b6472"; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
-        ctx.fillStyle = "#8b94a3"; ctx.font = "9px sans-serif"; ctx.fillText("now", x + 3, top + 9); ctx.restore();
+        ctx.save(); ctx.strokeStyle = "#c9d1dc"; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+        ctx.fillStyle = "#e6ebf2"; ctx.font = "bold 10px sans-serif"; ctx.fillText("now", x + 3, top + 9); ctx.restore();
       },
     };
     st.chart = new Chart(root.querySelector("canvas").getContext("2d"), {
@@ -212,9 +215,9 @@
       data: {
         labels: all.map(p => when(p.t)),
         datasets: [
-          { label: "normal tide", data: all.map(p => r2(p.pred)), borderColor: "#7b8698", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
+          { label: "normal", data: all.map(p => r2(p.pred)), borderColor: "#7b8698", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
           { label: "measured", data: all.map(p => r2(p.obs)), borderColor: color, backgroundColor: color + "33", fill: "-1", pointRadius: 0, borderWidth: 2, tension: 0.3 },
-          { label: "if extra stays", data: all.map((p, i) => (i < nowIdx ? null : r2(p.pred + g.now))), borderColor: color, borderDash: [3, 3], backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
+          { label: "if it stays", data: all.map((p, i) => (i < nowIdx ? null : r2(p.pred + g.now))), borderColor: color, borderDash: [3, 3], backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
         ],
       },
       plugins: [nowLine],
@@ -222,13 +225,19 @@
         responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
         interaction: { mode: "index", intersect: false },
         plugins: {
-          legend: { display: true, position: "top", labels: { boxWidth: 12, boxHeight: 2, color: "#8b94a3", font: { size: 9 } } },
+          legend: { display: true, position: "top", align: "start", labels: { boxWidth: 14, boxHeight: 3, padding: 8, color: "#d5dbe4", font: { size: 11, weight: "600" } } },
           tooltip: { backgroundColor: "#1a2230", borderColor: "#2c3646", borderWidth: 1, titleColor: "#e6ebf2", bodyColor: "#e6ebf2", padding: 8,
             callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y} ${prefs.unit}` } },
         },
         scales: {
-          x: { ticks: { color: "#5b6472", maxTicksLimit: 5, maxRotation: 0, font: { size: 10 }, callback: (v, i) => { const d = new Date(all[i].t); return DOW[d.getDay()] + " " + pad(d.getHours()) + "h"; } }, grid: { display: false } },
-          y: { title: { display: true, text: prefs.unit, color: "#5b6472", font: { size: 10 } }, ticks: { color: "#5b6472", maxTicksLimit: 5, font: { size: 10 } }, grid: { color: "#1c2330" } },
+          x: {
+            ticks: { color: "#aab3c0", autoSkip: false, maxRotation: 0, font: { size: 10 },
+              callback: (v, i) => { const m = mark(i); return m === 0 ? DOW[new Date(all[i].t).getDay()] : m === 12 ? "12h" : null; } },
+            grid: { color: c => (mark(c.index) === 0 ? "#3e4a5c" : "#252e3b"), drawTicks: false },
+          },
+          y: { title: { display: true, text: prefs.unit, color: "#aab3c0", font: { size: 10 } },
+            ticks: { color: "#aab3c0", stepSize: prefs.unit === "ft" ? 1 : 0.5, font: { size: 10 } },
+            grid: { color: c => (c.tick.value === 0 ? "#4a5770" : "#252e3b") } },
         },
       },
     });
