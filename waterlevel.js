@@ -6,7 +6,7 @@
 //   (with ctrlEl the caller supplies the header and the PV/Manz + ft/m toggles go there)
 (() => {
   const IOC = "https://www.ioc-sealevelmonitoring.org/service.php";
-  const BUC = { lat: 20.756, lon: -105.334 };
+  const BAY = { lat: 20.68, lon: -105.40 }; // middle of Banderas Bay (approx.)
   const GAUGES = { puert: { short: "PV", color: "#22d3ee" }, mnza: { short: "Manz", color: "#fbbf24" } };
   const H = 3600e3, M_FT = 3.28084, CM_IN = 0.393701;
 
@@ -114,9 +114,9 @@
     return out;
   }
 
-  // forecast pressure change at Bucerías (model), hPa below now at a given time
+  // forecast pressure change in Banderas Bay (model), hPa below now at a given time
   async function pressureDrop() {
-    const j = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${BUC.lat}&longitude=${BUC.lon}&hourly=pressure_msl&forecast_days=3&timeformat=unixtime`);
+    const j = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${BAY.lat}&longitude=${BAY.lon}&hourly=pressure_msl&forecast_days=3&timeformat=unixtime`);
     const t = j.hourly.time.map(s => s * 1000), p = j.hourly.pressure_msl;
     const near = ms => t.reduce((best, x, i) => (Math.abs(x - ms) < Math.abs(t[best] - ms) ? i : best), 0);
     const i0 = near(Date.now());
@@ -171,7 +171,7 @@
         <tr><th>next highs (PV)</th><th>normal</th><th>est. still water</th></tr>
         ${rows.map(r => `<tr><td>${when(r.t)}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
       </table>
-      ${(() => { const st = window.SURGE_DATA.storm; return st ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${st.advisory}): ${st.name} passes closest to Bucerías ~<b>${when(Date.parse(st.closest.t))}</b>, ~${st.closest.km} km away — red line on the graph. Track error at 1–2 days is tens of km.</p>` : ""; })()}
+      ${(() => { const st = window.SURGE_DATA.storm; return st ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${st.advisory}): ${st.name} ${st.closest.km < 5 ? "is over Banderas Bay" : "passes closest to Banderas Bay"} ~<b>${when(Date.parse(st.closest.t))}</b>${st.closest.km < 5 ? "" : `, ~${st.closest.km} km away`} — red line on the graph. Track error at 1–2 days is tens of km.</p>` : ""; })()}
       <p class="wl-note">Heights above low-water datum (from the PV gauge). Estimate = normal tide + PV now (low) or Manzanillo now (high, it led PV by ~1 day last time) + forecast pressure drop. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
     </div>`;
 
@@ -199,7 +199,7 @@
     const hr = i => new Date(all[i].t).getHours();
     const mark = i => (i > 0 && hr(i) !== hr(i - 1) && (hr(i) === 0 || hr(i) === 12) ? hr(i) : null);
     const color = GAUGES[sel].color;
-    // NHC forecast: when the storm passes closest to Bucerías
+    // NHC forecast: when the storm passes closest to Banderas Bay
     const sc = window.SURGE_DATA.storm?.closest;
     const sT = sc ? Date.parse(sc.t) : NaN;
     const stormIdx = sT > all[0].t && sT < all[all.length - 1].t ? all.findIndex(p => p.t >= sT) : -1;
@@ -215,7 +215,7 @@
       id: "wlNow",
       afterDatasetsDraw(c) {
         vline(c, nowIdx, "#e6ebf2", "now", 0);
-        if (stormIdx >= 0) vline(c, stormIdx, "#f87171", `${window.SURGE_DATA.storm.name} ~${sc.km} km`, 1);
+        if (stormIdx >= 0) vline(c, stormIdx, "#f87171", sc.km < 5 ? window.SURGE_DATA.storm.name : `${window.SURGE_DATA.storm.name} ~${sc.km} km`, 1);
       },
     };
     st.chart = new Chart(root.querySelector("canvas").getContext("2d"), {

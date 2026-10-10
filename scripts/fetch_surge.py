@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tide fits for the Bucerías / Bahía de Banderas water-level tile.
+"""Tide fits for the Banderas Bay water-level tile.
 
 Harmonic tide fit (8 diurnal/semidiurnal, 2 shallow-water, 2 seasonal
 constituents) for the IOC tide gauges at Puerto Vallarta and Manzanillo, from
@@ -9,7 +9,7 @@ part of sea level (coastal/Kelvin waves, low pressure, surge).
 Refit at most once a day; reused from the previous output otherwise.
 
 Also: the nearest NHC storm's forecast track and when it passes closest to
-Bucerías (marked on the graph).
+Banderas Bay (marked on the graph).
 
 Usage: fetch_surge.py <data_dir>   -> <data_dir>/surge.json and surge.js
 """
@@ -108,7 +108,7 @@ def tides(prev):
     return out, dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
-BUC = (20.756, -105.334)  # Bucerías
+BAY = (20.68, -105.40)  # middle of Banderas Bay (approx.)
 
 
 def km(a, b):
@@ -119,14 +119,14 @@ def km(a, b):
 
 def storm():
     """Nearest active NHC east/central Pacific storm: forecast track and its
-    closest approach to Bucerías (linear between the 12-h forecast points).
+    closest approach to Banderas Bay (linear between the 12-h forecast points).
     NHC sends no CORS header, so the page can't fetch this itself."""
     cur = json.loads(get("https://www.nhc.noaa.gov/CurrentStorms.json", 30))
     best = None
     for s in cur.get("activeStorms", []):
         if not s["id"].startswith(("ep", "cp")):
             continue
-        d = km(BUC, (s["latitudeNumeric"], s["longitudeNumeric"]))
+        d = km(BAY, (s["latitudeNumeric"], s["longitudeNumeric"]))
         if d < 1500 and (best is None or d < best[0]):
             best = (d, s)
     if not best:
@@ -160,7 +160,7 @@ def storm():
     for (t0, la0, lo0), (t1, la1, lo1) in zip(track, track[1:]):
         for i in range(61):
             f = i / 60
-            d = km(BUC, (la0 + (la1 - la0) * f, lo0 + (lo1 - lo0) * f))
+            d = km(BAY, (la0 + (la1 - la0) * f, lo0 + (lo1 - lo0) * f))
             if close is None or d < close[0]:
                 close = (d, t0 + (t1 - t0) * f)
     return {
