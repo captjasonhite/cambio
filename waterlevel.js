@@ -187,9 +187,9 @@
       <div class="wl-chart"><canvas></canvas></div>
       <table>
         <tr><th>next highs (${GAUGES[sel].short})</th><th>normal</th><th>estimated</th></tr>
-        ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${when(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} ${r.km < 5 ? "arrival" : `closest ~${r.km} km`}` : ""}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
+        ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${when(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} ${r.km < 5 ? "arrival" : `closest ~${Math.round(r.km / 1.852)} nm`}` : ""}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
       </table>
-      ${(() => { const s = window.SURGE_DATA.storm, c = s?.closest_by?.[sel] ?? (sel === "puert" ? s?.closest : null), pl = PLACE[sel].name; return c ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${s.advisory}): ${s.name} ${c.km < 5 ? `is over ${pl}` : `passes closest to ${pl}`} ~<b>${when(Date.parse(c.t))}</b>${c.km < 5 ? "" : `, ~${c.km} km away`} — red line on the graph. Track error at 1–2 days is tens of km.</p>` : ""; })()}
+      ${(() => { const s = window.SURGE_DATA.storm, c = s?.closest_by?.[sel] ?? (sel === "puert" ? s?.closest : null), pl = PLACE[sel].name; return c ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${s.advisory}): ${s.name} ${c.km < 5 ? `is over ${pl}` : `passes closest to ${pl}`} ~<b>${when(Date.parse(c.t))}</b>${c.km < 5 ? "" : `, ~${Math.round(c.km / 1.852)} nm away`} — red line on the graph. Track error at 1–2 days is tens of nm.</p>` : ""; })()}
       <p class="wl-note">Heights above low-water datum (from the ${sel === "puert" ? "PV" : "Manzanillo"} gauge). Estimate = normal tide + ${sel === "puert" ? "PV's extra water now (low) or Manzanillo's (high, it led PV by ~1 day last time)" : "Manzanillo's extra water now"} + forecast pressure drop. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
     </div>`;
 
@@ -233,7 +233,7 @@
       id: "wlNow",
       afterDatasetsDraw(c) {
         vline(c, nowIdx, "#e6ebf2", "now", 0);
-        if (stormIdx >= 0) vline(c, stormIdx, "#f87171", sc.km < 5 ? window.SURGE_DATA.storm.name : `${window.SURGE_DATA.storm.name} ~${sc.km} km`, 1);
+        if (stormIdx >= 0) vline(c, stormIdx, "#f87171", sc.km < 5 ? window.SURGE_DATA.storm.name : `${window.SURGE_DATA.storm.name} ~${Math.round(sc.km / 1.852)} nm`, 1);
       },
     };
     st.chart = new Chart(root.querySelector("canvas").getContext("2d"), {

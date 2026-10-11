@@ -110,7 +110,7 @@ def tides(prev):
 
 BAY = (20.68, -105.40)  # middle of Banderas Bay (approx.)
 # where to measure the storm's closest pass for each gauge's graph
-NEAR = {"puert": BAY, "mnza": (19.06, -104.30)}  # Manzanillo gauge
+NEAR = {"puert": (20.536, -105.425), "mnza": (19.06, -104.30)}  # mid bay entrance; Manzanillo gauge
 
 
 def km(a, b):
@@ -172,7 +172,7 @@ def storm():
         "name": s["name"], "class": s["classification"], "advisory": adv.group(1) if adv else None,
         "updated": s["lastUpdate"],
         "track": [{"t": a.isoformat(), "lat": b, "lon": c} for a, b, c in track],
-        "closest": closest(BAY),
+        "closest": closest(NEAR["puert"]),
         "closest_by": {code: closest(pt) for code, pt in NEAR.items()},
     }
 
