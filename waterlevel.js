@@ -97,10 +97,14 @@
     const mean = (t1) => { const w = pts.filter(p => p.t > t1 - WIN && p.t <= t1); return w.length > 9 ? w.reduce((a, p) => a + p.res, 0) / w.length : null; };
     pts.forEach(p => { p.avg = mean(p.t); });
     const last = pts[pts.length - 1].t;
+    const now = pts[pts.length - 1].avg ?? pts[pts.length - 1].res;
+    // trend: smoothed extra water now vs 3 h ago (null if the gauge has a gap there)
+    const then = pts.filter(p => p.avg != null && Math.abs(p.t - (last - 3 * H)) <= 20 * 60e3).pop();
+    const trend = then ? now - then.avg : null;
     // next 48 h of normal tide, same 10-min grid
     const future = [];
     for (let t = last + 600e3; t < Date.now() + 48 * H; t += 600e3) future.push({ t, pred: tideAt(g, speeds, t) - g.mllw });
-    return { pts, future, last, now: pts[pts.length - 1].avg ?? pts[pts.length - 1].res, predAt: t => tideAt(g, speeds, t) - g.mllw };
+    return { pts, future, last, now, trend, predAt: t => tideAt(g, speeds, t) - g.mllw };
   }
 
   // normal high tides (PV fit) in the next 48 h, metres above the fit's MLLW
@@ -175,6 +179,9 @@
     let badge = '<span class="wl-badge flat">normal</span>';
     if (pv && pv.now >= 0.3) badge = '<span class="wl-badge red">HIGH WATER</span>';
     else if (pv && pv.now >= 0.15) badge = '<span class="wl-badge amber">ABOVE NORMAL</span>';
+    // rising/falling over the last 3 h; under ~1 cm is noise
+    const tr = g?.trend == null ? "" : Math.abs(g.trend) < 0.01 ? ` · <span>steady over 3 h</span>`
+      : ` · <span style="color:${g.trend > 0 ? (g.trend >= 0.05 ? "var(--red)" : "var(--amber)") : "var(--green, #4ade80)"}; font-weight:700">${g.trend > 0 ? "▲ rising" : "▼ falling"} ${off(g.trend)} ${offU()} in 3 h</span>`;
     const stale = g && Date.now() - g.last > 2 * H ? ` · <span class="error">gauge ${Math.round((Date.now() - g.last) / H)} h old</span>` : "";
     const top = Math.max(...rows.filter(r => !r.storm).map(r => r.tide));
     const tog = (name, items, cur) => `<div class="wl-tog" data-k="${name}">${items.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
@@ -183,7 +190,7 @@
     if (st.opts.ctrlEl) st.opts.ctrlEl.innerHTML = bar;
     root.innerHTML = `<div class="wl">
       ${st.opts.ctrlEl ? "" : `<div class="wl-head"><h2>Simon Storm Surge <span class="wl-exp">EXPERIMENTAL</span></h2>${bar}</div>`}
-      <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above normal at ${GAUGES[sel].short}${stale}</span>${badge}</div>
+      <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above normal at ${GAUGES[sel].short}${tr}${stale}</span>${badge}</div>
       <div class="wl-chart"><canvas></canvas></div>
       <table>
         <tr><th>next highs (${GAUGES[sel].short})</th><th>normal</th><th>estimated</th></tr>
