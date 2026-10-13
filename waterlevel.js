@@ -3,7 +3,7 @@
 // Shared by the PV dashboard and cambio. Needs Chart.js and window.SURGE_DATA
 // (tide fits written by scripts/fetch_surge.py).
 //   WaterLevel.render(rootEl, { ctrlEl })  -> fetches live gauge data and draws the tile
-//   (with ctrlEl the caller supplies the header and the PV/Manz/LPZ + ft/m toggles go there)
+//   (with ctrlEl the caller supplies the header and the Manz/PV/LPZ toggle + ft/m button go there)
 (() => {
   const IOC = "https://www.ioc-sealevelmonitoring.org/service.php";
   const BAY = { lat: 20.68, lon: -105.40 }; // middle of Banderas Bay (approx.)
@@ -23,6 +23,8 @@
   .wl-badge.amber { color: var(--amber); background: rgba(251, 191, 36, 0.12); }
   .wl-badge.flat  { color: var(--muted); background: rgba(123, 134, 152, 0.12); }
   .wl-bar { display: flex; gap: 6px; flex: none; }
+  .wl-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .wl-side .wl-badge { margin-left: 0; align-self: flex-end; }
   .wl-tog { display: inline-flex; border: 1px solid #1e2530; border-radius: 10px; overflow: hidden; }
   .wl-tog button {
     background: transparent; color: var(--muted); border: none; padding: 7px 8px;
@@ -31,7 +33,7 @@
   .wl-tog button.on { background: #1a2230; color: var(--text); }
   .wl-now { display: flex; align-items: baseline; gap: 8px; }
   .wl-val { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-  .wl-unit { color: var(--muted); font-size: 0.8rem; }
+  .wl-unit { color: var(--muted); font-size: 0.8rem; margin-left: auto; text-align: right; }
   .wl-chart { position: relative; height: 190px; width: 100%; min-width: 0; overflow: hidden; }
   .wl table { width: 100%; border-collapse: collapse; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
   .wl th { color: var(--muted); font-weight: 600; text-align: right; padding: 3px 4px; font-size: 0.7rem; }
@@ -53,7 +55,7 @@
 
   // offsets (m) as cm or inches; heights (m) as m or ft
   const off = v => { const n = Math.round(prefs.unit === "ft" ? v * 100 * CM_IN : v * 100); return (n >= 0 ? "+" : "−") + Math.abs(n); };
-  const offU = () => (prefs.unit === "ft" ? "in" : "cm");
+  const offU = () => (prefs.unit === "ft" ? '"' : "cm");
   const ht = v => (prefs.unit === "ft" ? (v * M_FT).toFixed(1) : v.toFixed(2));
 
   // harmonic tide for one gauge at epoch ms -> metres in gauge units
@@ -200,20 +202,22 @@
     else if (g && g.now >= 0.15) badge = '<span class="wl-badge amber">ABOVE FORECAST</span>';
     // rising/falling over the last 3 h; under ~1 cm is noise
     const tr = g?.trend == null ? "" : Math.abs(g.trend) < 0.01 ? ` · <span>steady over 3 h</span>`
-      : ` · <span style="color:${g.trend > 0 ? (g.trend >= 0.05 ? "var(--red)" : "var(--amber)") : "var(--green, #4ade80)"}; font-weight:700">${g.trend > 0 ? "▲ rising" : "▼ falling"} ${off(g.trend)} ${offU()} in 3 h</span>`;
+      : ` · <span style="color:${g.trend > 0 ? (g.trend >= 0.05 ? "var(--red)" : "var(--amber)") : "var(--green, #4ade80)"}; font-weight:700">${g.trend > 0 ? "▲ rising" : "▼ falling"} ${off(g.trend)}${prefs.unit === "ft" ? "" : " "}${offU()} over 3 h</span>`;
     const stale = g && Date.now() - g.last > 2 * H ? ` · <span class="error">gauge ${Math.round((Date.now() - g.last) / H)} h old</span>` : "";
     const top = Math.max(...rows.filter(r => !r.storm).map(r => r.tide));
     const tog = (name, items, cur) => `<div class="wl-tog" data-k="${name}">${items.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
 
-    const bar = `<div class="wl-bar">${tog("gauge", [["puert", "PV"], ["mnza", "Manz"], ["lpaz2", "LPZ"]], sel)}${tog("unit", [["ft", "ft"], ["m", "m"]], prefs.unit)}</div>`;
+    // one unit button showing the current unit; a tap switches to the other
+    const unitBtn = `<div class="wl-tog" data-k="unit"><button type="button" data-v="${prefs.unit === "ft" ? "m" : "ft"}" class="on" title="switch units">${prefs.unit}</button></div>`;
+    const bar = `<div class="wl-side"><div class="wl-bar">${tog("gauge", [["mnza", "Manz"], ["puert", "PV"], ["lpaz2", "LPZ"]], sel)}${unitBtn}</div>${badge}</div>`;
     if (st.opts.ctrlEl) st.opts.ctrlEl.innerHTML = bar;
     root.innerHTML = `<div class="wl">
       ${st.opts.ctrlEl ? "" : `<div class="wl-head"><h2>Tide Actual vs Forecast <span class="wl-exp">EXPERIMENTAL</span></h2>${bar}</div>`}
-      <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above forecast at ${GAUGES[sel].short}${tr}${stale}</span>${badge}</div>
+      <div class="wl-now"><span class="wl-val">${g ? off(g.now) + offU() : "—"}</span><span class="wl-unit">${(tr + stale).replace(/^ · /, "")}</span></div>
       <div class="wl-chart"><canvas></canvas></div>
       <table>
-        <tr><th>next highs (${GAUGES[sel].short})</th><th>forecast</th><th>estimated</th></tr>
-        ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${when(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} ${r.km < 5 ? "arrival" : `closest ~${Math.round(r.km / 1.852)} nm`}` : ""}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
+        <tr><th>next highs</th><th>forecast</th><th>estimated</th></tr>
+        ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${when(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} ${r.km < 5 ? "arrival" : `closest ~${Math.round(r.km / 1.852)} nm`}` : ""}</td><td>${ht(r.tide)} ${prefs.unit}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
       </table>
       ${(() => { const s = window.SURGE_DATA.storm, c = approach(sel), pl = PLACE[sel].name; return c ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${s.advisory}): ${Date.parse(c.t) <= Date.now() ? `${s.name} passed closest to ${pl}${c.km < 5 ? "" : ` (~${Math.round(c.km / 1.852)} nm)`} ~<b>${when(Date.parse(c.t))}</b> per the last forecast before it turned away — red line on the graph.` : `${s.name} ${c.km < 5 ? `is over ${pl}` : `passes closest to ${pl}`} ~<b>${when(Date.parse(c.t))}</b>${c.km < 5 ? "" : `, ~${Math.round(c.km / 1.852)} nm away`}${Date.parse(c.t) < Date.now() + 48 * H ? " — red line on the graph" : " (on the graph once within 48 h)"}. Track error at 1–2 days is tens of nm.`}</p>` : ""; })()}
       <p class="wl-note">Heights above low-water datum (from the ${{ puert: "PV", mnza: "Manzanillo", lpaz2: "La Paz (Pichilingue)" }[sel]} gauge). Estimate = forecast tide + ${sel === "puert" ? "PV's extra water, trending (low) or Manzanillo's (high, it led PV by ~1 day last time)" : `${{ mnza: "Manzanillo", lpaz2: "La Paz" }[sel]}'s extra water, trending`} + forecast pressure drop. Trending = the last 24 h change carried on and fading over ~a day (max ±30 cm more): an extrapolation, not a forecast. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
