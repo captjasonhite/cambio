@@ -3,12 +3,12 @@
 // Shared by the PV dashboard and cambio. Needs Chart.js and window.SURGE_DATA
 // (tide fits written by scripts/fetch_surge.py).
 //   WaterLevel.render(rootEl, { ctrlEl })  -> fetches live gauge data and draws the tile
-//   (with ctrlEl the caller supplies the header and the PV/Manz + ft/m toggles go there)
+//   (with ctrlEl the caller supplies the header and the PV/Manz/LPZ + ft/m toggles go there)
 (() => {
   const IOC = "https://www.ioc-sealevelmonitoring.org/service.php";
   const BAY = { lat: 20.68, lon: -105.40 }; // middle of Banderas Bay (approx.)
-  const PLACE = { puert: { name: "Banderas Bay", lat: BAY.lat, lon: BAY.lon }, mnza: { name: "Manzanillo", lat: 19.06, lon: -104.30 } };
-  const GAUGES = { puert: { short: "PV", color: "#22d3ee" }, mnza: { short: "Manz", color: "#fbbf24" } };
+  const PLACE = { puert: { name: "Banderas Bay", lat: BAY.lat, lon: BAY.lon }, mnza: { name: "Manzanillo", lat: 19.06, lon: -104.30 }, lpaz2: { name: "La Paz", lat: 24.27, lon: -110.33 } };
+  const GAUGES = { puert: { short: "PV", color: "#22d3ee" }, mnza: { short: "Manz", color: "#fbbf24" }, lpaz2: { short: "LPZ", color: "#a78bfa" } };
   const H = 3600e3, M_FT = 3.28084, CM_IN = 0.393701;
 
   const css = document.createElement("style");
@@ -49,7 +49,7 @@
   const when = t => { const d = new Date(t); return DOW[d.getDay()] + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); };
   const pref = (k, ok, d) => { try { const v = localStorage.getItem(k); return ok.includes(v) ? v : d; } catch (e) { return d; } };
   const save = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
-  const prefs = { gauge: pref("wl-gauge", ["puert", "mnza"], "puert"), unit: pref("wl-unit", ["m", "ft"], "m") };
+  const prefs = { gauge: pref("wl-gauge", ["puert", "mnza", "lpaz2"], "puert"), unit: pref("wl-unit", ["m", "ft"], "m") };
 
   // offsets (m) as cm or inches; heights (m) as m or ft
   const off = v => { const n = Math.round(prefs.unit === "ft" ? v * 100 * CM_IN : v * 100); return (n >= 0 ? "+" : "−") + Math.abs(n); };
@@ -104,7 +104,13 @@
     // next 48 h of normal tide, same 10-min grid
     const future = [];
     for (let t = last + 600e3; t < Date.now() + 48 * H; t += 600e3) future.push({ t, pred: tideAt(g, speeds, t) - g.mllw });
-    return { pts, future, last, now, trend, predAt: t => tideAt(g, speeds, t) - g.mllw };
+    // trending extra water: continue the last 24 h change (steadier than 3 h:
+    // whole tide cycles), fading over ~a day, capped at ±30 cm beyond now.
+    // An extrapolation, not a model; flat if the gauge has a gap 24 h back.
+    const day = pts.filter(p => p.avg != null && Math.abs(p.t - (last - 24 * H)) <= 30 * 60e3).pop();
+    const trend24 = day ? now - day.avg : 0;
+    const extra = t => now + Math.max(-0.3, Math.min(0.3, trend24 * (1 - Math.exp(-Math.max(0, t - last) / (24 * H)))));
+    return { pts, future, last, now, trend, trend24, extra, predAt: t => tideAt(g, speeds, t) - g.mllw };
   }
 
   // normal high tides (PV fit) in the next 48 h, metres above the fit's MLLW
@@ -129,17 +135,27 @@
     return ms => p[i0] - p[near(ms)];
   }
 
+  // NHC storm's closest pass to a gauge's area: follows the forecast while the
+  // storm approaches, then fetch_surge.py freezes it so it scrolls off the graph.
+  // Dropped once it's older than the graph's 48 h of history.
+  const approach = code => {
+    const s = window.SURGE_DATA?.storm, c = s?.closest_by?.[code];
+    return c && Date.parse(c.t) > Date.now() - 48 * H ? c : null;
+  };
+
   const state = new WeakMap(); // root -> { data, opts, chart }
 
   async function render(root, opts = {}) {
     const S = window.SURGE_DATA;
     if (!S?.gauges?.puert) { root.innerHTML = '<div class="wl"><span class="error">no tide fit — run scripts/fetch_surge.py</span></div>'; return; }
     const speeds = Object.values(S.speeds);
-    const [puert, mnza, dropBay, dropMz] = await Promise.all([
+    const [puert, mnza, lpaz2, dropBay, dropMz, dropLp] = await Promise.all([
       gauge("puert", S.gauges.puert, speeds).catch(() => null),
       S.gauges.mnza ? gauge("mnza", S.gauges.mnza, speeds).catch(() => null) : null,
+      S.gauges.lpaz2 ? gauge("lpaz2", S.gauges.lpaz2, speeds).catch(() => null) : null,
       pressureDrop(PLACE.puert).catch(() => () => 0),
       pressureDrop(PLACE.mnza).catch(() => () => 0),
+      pressureDrop(PLACE.lpaz2).catch(() => () => 0),
     ]);
     // next highs + the storm's closest pass, per gauge, in that gauge's own datum.
     // PV's upper estimate uses Manzanillo's offset too (it led PV by ~1 day last time).
@@ -147,22 +163,25 @@
       const fit = S.gauges[code];
       if (!fit || !g) return [];
       const marks = highs(fit, speeds).slice(0, 4);
-      const c = S.storm?.closest_by?.[code] ?? (code === "puert" ? S.storm?.closest : null);
+      const c = approach(code);
       const sT = c ? Date.parse(c.t) : NaN;
       if (sT > Date.now() && sT < Date.now() + 48 * H) marks.push({ t: sT, tide: tideAt(fit, speeds, sT) - fit.mllw, storm: S.storm.name, km: c.km });
       marks.sort((a, b) => a.t - b.t);
       return marks.map(h => {
         const ib = Math.max(-0.15, drop(h.t) / 100); // ~1 cm per hPa
-        return { ...h, ib, lo: h.tide + lo + ib, hi: h.tide + hi + ib };
+        const a = lo(h.t), b = hi(h.t);
+        return { ...h, ib, lo: h.tide + a + ib, hi: h.tide + b + ib };
       });
     };
-    const pvNow = puert ? puert.now : 0;
+    // each gauge's trending extra water at time t (0 if the gauge is down)
+    const ex = g => t => (g ? g.extra(t) : 0);
     const rows = {
-      puert: table("puert", puert, dropBay, pvNow, Math.max(pvNow, mnza ? mnza.now : pvNow)),
-      mnza: table("mnza", mnza, dropMz, mnza?.now ?? 0, mnza?.now ?? 0),
+      puert: table("puert", puert, dropBay, ex(puert), t => Math.max(ex(puert)(t), mnza ? mnza.extra(t) : ex(puert)(t))),
+      mnza: table("mnza", mnza, dropMz, ex(mnza), ex(mnza)),
+      lpaz2: table("lpaz2", lpaz2, dropLp, ex(lpaz2), ex(lpaz2)),
     };
     const st = state.get(root) || {};
-    st.data = { gauges: { puert, mnza }, rows };
+    st.data = { gauges: { puert, mnza, lpaz2 }, rows };
     st.opts = opts;
     state.set(root, st);
     draw(root);
@@ -172,13 +191,13 @@
     const st = state.get(root);
     const { gauges } = st.data;
     const pv = gauges.puert;
-    const sel = gauges[prefs.gauge] ? prefs.gauge : (pv ? "puert" : "mnza");
+    const sel = gauges[prefs.gauge] ? prefs.gauge : (pv ? "puert" : gauges.mnza ? "mnza" : "lpaz2");
     const rows = st.data.rows[sel];
     const g = gauges[sel];
 
-    let badge = '<span class="wl-badge flat">normal</span>';
-    if (pv && pv.now >= 0.3) badge = '<span class="wl-badge red">HIGH WATER</span>';
-    else if (pv && pv.now >= 0.15) badge = '<span class="wl-badge amber">ABOVE NORMAL</span>';
+    let badge = '<span class="wl-badge flat">on forecast</span>';
+    if (g && g.now >= 0.3) badge = '<span class="wl-badge red">HIGH WATER</span>';
+    else if (g && g.now >= 0.15) badge = '<span class="wl-badge amber">ABOVE FORECAST</span>';
     // rising/falling over the last 3 h; under ~1 cm is noise
     const tr = g?.trend == null ? "" : Math.abs(g.trend) < 0.01 ? ` · <span>steady over 3 h</span>`
       : ` · <span style="color:${g.trend > 0 ? (g.trend >= 0.05 ? "var(--red)" : "var(--amber)") : "var(--green, #4ade80)"}; font-weight:700">${g.trend > 0 ? "▲ rising" : "▼ falling"} ${off(g.trend)} ${offU()} in 3 h</span>`;
@@ -186,18 +205,18 @@
     const top = Math.max(...rows.filter(r => !r.storm).map(r => r.tide));
     const tog = (name, items, cur) => `<div class="wl-tog" data-k="${name}">${items.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("")}</div>`;
 
-    const bar = `<div class="wl-bar">${tog("gauge", [["puert", "PV"], ["mnza", "Manz"]], sel)}${tog("unit", [["ft", "ft"], ["m", "m"]], prefs.unit)}</div>`;
+    const bar = `<div class="wl-bar">${tog("gauge", [["puert", "PV"], ["mnza", "Manz"], ["lpaz2", "LPZ"]], sel)}${tog("unit", [["ft", "ft"], ["m", "m"]], prefs.unit)}</div>`;
     if (st.opts.ctrlEl) st.opts.ctrlEl.innerHTML = bar;
     root.innerHTML = `<div class="wl">
-      ${st.opts.ctrlEl ? "" : `<div class="wl-head"><h2>Simon Storm Surge <span class="wl-exp">EXPERIMENTAL</span></h2>${bar}</div>`}
-      <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above normal at ${GAUGES[sel].short}${tr}${stale}</span>${badge}</div>
+      ${st.opts.ctrlEl ? "" : `<div class="wl-head"><h2>Tide Actual vs Forecast <span class="wl-exp">EXPERIMENTAL</span></h2>${bar}</div>`}
+      <div class="wl-now"><span class="wl-val">${g ? off(g.now) : "—"}</span><span class="wl-unit">${offU()} above forecast at ${GAUGES[sel].short}${tr}${stale}</span>${badge}</div>
       <div class="wl-chart"><canvas></canvas></div>
       <table>
-        <tr><th>next highs (${GAUGES[sel].short})</th><th>normal</th><th>estimated</th></tr>
+        <tr><th>next highs (${GAUGES[sel].short})</th><th>forecast</th><th>estimated</th></tr>
         ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${when(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} ${r.km < 5 ? "arrival" : `closest ~${Math.round(r.km / 1.852)} nm`}` : ""}</td><td>${ht(r.tide)}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
       </table>
-      ${(() => { const s = window.SURGE_DATA.storm, c = s?.closest_by?.[sel] ?? (sel === "puert" ? s?.closest : null), pl = PLACE[sel].name; return c ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${s.advisory}): ${s.name} ${c.km < 5 ? `is over ${pl}` : `passes closest to ${pl}`} ~<b>${when(Date.parse(c.t))}</b>${c.km < 5 ? "" : `, ~${Math.round(c.km / 1.852)} nm away`} — red line on the graph. Track error at 1–2 days is tens of nm.</p>` : ""; })()}
-      <p class="wl-note">Heights above low-water datum (from the ${sel === "puert" ? "PV" : "Manzanillo"} gauge). Estimate = normal tide + ${sel === "puert" ? "PV's extra water now (low) or Manzanillo's (high, it led PV by ~1 day last time)" : "Manzanillo's extra water now"} + forecast pressure drop. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
+      ${(() => { const s = window.SURGE_DATA.storm, c = approach(sel), pl = PLACE[sel].name; return c ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${s.advisory}): ${Date.parse(c.t) <= Date.now() ? `${s.name} passed closest to ${pl}${c.km < 5 ? "" : ` (~${Math.round(c.km / 1.852)} nm)`} ~<b>${when(Date.parse(c.t))}</b> per the last forecast before it turned away — red line on the graph.` : `${s.name} ${c.km < 5 ? `is over ${pl}` : `passes closest to ${pl}`} ~<b>${when(Date.parse(c.t))}</b>${c.km < 5 ? "" : `, ~${Math.round(c.km / 1.852)} nm away`}${Date.parse(c.t) < Date.now() + 48 * H ? " — red line on the graph" : " (on the graph once within 48 h)"}. Track error at 1–2 days is tens of nm.`}</p>` : ""; })()}
+      <p class="wl-note">Heights above low-water datum (from the ${{ puert: "PV", mnza: "Manzanillo", lpaz2: "La Paz (Pichilingue)" }[sel]} gauge). Estimate = forecast tide + ${sel === "puert" ? "PV's extra water, trending (low) or Manzanillo's (high, it led PV by ~1 day last time)" : `${{ mnza: "Manzanillo", lpaz2: "La Paz" }[sel]}'s extra water, trending`} + forecast pressure drop. Trending = the last 24 h change carried on and fading over ~a day (max ±30 cm more): an extrapolation, not a forecast. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
     </div>`;
 
     const togs = [...root.querySelectorAll(".wl-tog"), ...(st.opts.ctrlEl ? st.opts.ctrlEl.querySelectorAll(".wl-tog") : [])];
@@ -220,12 +239,25 @@
     const all = [];
     for (let t = g.last - 48 * H; t <= g.future[g.future.length - 1].t; t += 600e3) all.push({ t, obs: obs.get(t) ?? null, pred: g.predAt(t) });
     const nowIdx = all.findIndex(p => p.t >= g.last);
+    // gauge gaps (PV sends nothing ~18:00–23:30 local most days): normal tide +
+    // the extra water interpolated between the readings either side, up to 8 h
+    const avg = new Map(g.pts.map(p => [p.t, p.avg ?? p.res]));
+    const est = all.map(() => null);
+    let a = -1;
+    all.forEach((p, i) => {
+      if (p.obs == null || i > nowIdx) return;
+      if (a >= 0 && i - a > 1 && i - a <= 48) {
+        const r0 = avg.get(all[a].t), r1 = avg.get(p.t);
+        for (let j = a; j <= i; j++) est[j] = all[j].pred + r0 + (r1 - r0) * (j - a) / (i - a);
+      }
+      a = i;
+    });
     // grid marks: midnight (day name) and noon, at the first 10-min bin of that hour
     const hr = i => new Date(all[i].t).getHours();
     const mark = i => (i > 0 && hr(i) !== hr(i - 1) && (hr(i) === 0 || hr(i) === 12) ? hr(i) : null);
     const color = GAUGES[sel].color;
     // NHC forecast: when the storm passes closest to the selected gauge's area
-    const sc = window.SURGE_DATA.storm?.closest_by?.[sel] ?? (sel === "puert" ? window.SURGE_DATA.storm?.closest : null);
+    const sc = approach(sel);
     const sT = sc ? Date.parse(sc.t) : NaN;
     const stormIdx = sT > all[0].t && sT < all[all.length - 1].t ? all.findIndex(p => p.t >= sT) : -1;
     const vline = (c, i, color, text, row) => {
@@ -248,9 +280,10 @@
       data: {
         labels: all.map(p => when(p.t)),
         datasets: [
-          { label: "normal", data: all.map(p => r2(p.pred)), borderColor: "#7b8698", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
+          { label: "forecast", data: all.map(p => r2(p.pred)), borderColor: "#7b8698", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
           { label: "measured", data: all.map(p => r2(p.obs)), borderColor: color, backgroundColor: color + "33", fill: "-1", pointRadius: 0, borderWidth: 2, tension: 0.3 },
-          { label: "if it stays", data: all.map((p, i) => (i < nowIdx ? null : r2(p.pred + g.now))), borderColor: color, borderDash: [3, 3], backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
+          { label: "gauge gap (est.)", data: est.map(r2), borderColor: color + "99", borderDash: [1, 3], backgroundColor: "transparent", pointRadius: 0, borderWidth: 2, tension: 0.3, spanGaps: false },
+          { label: "trending", data: all.map((p, i) => (i < nowIdx ? null : r2(p.pred + g.extra(p.t)))), borderColor: color, borderDash: [3, 3], backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
         ],
       },
       plugins: [nowLine],
@@ -258,7 +291,7 @@
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: "index", intersect: false },
         plugins: {
-          legend: { display: true, position: "top", align: "start", labels: { boxWidth: 14, boxHeight: 3, padding: 8, color: "#d5dbe4", font: { size: 11, weight: "600" } } },
+          legend: { display: true, position: "top", align: "start", labels: { filter: (it, d) => d.datasets[it.datasetIndex].data.some(v => v != null), boxWidth: 14, boxHeight: 3, padding: 8, color: "#d5dbe4", font: { size: 11, weight: "600" } } },
           tooltip: { backgroundColor: "#1a2230", borderColor: "#2c3646", borderWidth: 1, titleColor: "#e6ebf2", bodyColor: "#e6ebf2", padding: 8,
             callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y} ${prefs.unit}` } },
         },

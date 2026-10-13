@@ -1,6 +1,6 @@
 {
-  "name": "Simon Storm Surge",
-  "short_name": "Storm Surge",
+  "name": "Tide Actual vs Forecast",
+  "short_name": "Tide vs Fcst",
   "start_url": "surge.html",
   "scope": "./",
   "id": "surge.html",

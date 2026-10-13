@@ -2,14 +2,14 @@
 """Tide fits for the Banderas Bay water-level tile.
 
 Harmonic tide fit (8 diurnal/semidiurnal, 2 shallow-water, 2 seasonal
-constituents) for the IOC tide gauges at Puerto Vallarta and Manzanillo, from
+constituents) for the IOC tide gauges at Puerto Vallarta, Manzanillo and La Paz, from
 ~365 days of their own 1-min data. The page fetches the latest gauge readings
 itself (IOC allows CORS) and subtracts this fit: what's left is the non-tide
 part of sea level (coastal/Kelvin waves, low pressure, surge).
 Refit at most once a day; reused from the previous output otherwise.
 
 Also: the nearest NHC storm's forecast track and when it passes closest to
-Banderas Bay (marked on the graph).
+Banderas Bay (marked on the graph; frozen once the storm moves away).
 
 Usage: fetch_surge.py <data_dir>   -> <data_dir>/surge.json and surge.js
 """
@@ -25,7 +25,7 @@ import numpy as np
 
 UA = "Mozilla/5.0 (X11; Linux x86_64) cambio-surge/1.0"
 IOC = "https://www.ioc-sealevelmonitoring.org/service.php"
-GAUGES = [("puert", "Puerto Vallarta"), ("mnza", "Manzanillo")]
+GAUGES = [("puert", "Puerto Vallarta"), ("mnza", "Manzanillo"), ("lpaz2", "La Paz")]
 SENSOR = "rad"
 FIT_DAYS, SKIP_DAYS, REFIT_H = 365, 4, 24
 # degrees per hour
@@ -60,7 +60,7 @@ def ioc_hourly(code, start, stop):
             continue
         ts = dt.datetime.fromisoformat(r["stime"]).replace(tzinfo=dt.timezone.utc).timestamp()
         bins.setdefault(math.floor(ts / 3600), []).append(r["slevel"])
-    h = np.array(sorted(bins), dtype=float)
+    h = np.array(sorted(bins), dtype=float) + 0.5  # each mean sits mid-hour
     y = np.array([np.mean(bins[k]) for k in sorted(bins)])
     good = np.abs(y - np.median(y)) < 3  # drop sensor spikes
     return h[good], y[good]
@@ -110,7 +110,7 @@ def tides(prev):
 
 BAY = (20.68, -105.40)  # middle of Banderas Bay (approx.)
 # where to measure the storm's closest pass for each gauge's graph
-NEAR = {"puert": (20.536, -105.425), "mnza": (19.06, -104.30)}  # mid bay entrance; Manzanillo gauge
+NEAR = {"puert": (20.536, -105.425), "mnza": (19.06, -104.30), "lpaz2": (24.267, -110.333)}  # mid bay entrance; Manzanillo, La Paz (Pichilingue) gauges
 
 
 def km(a, b):
@@ -178,6 +178,33 @@ def storm():
 
 
 
+def freeze(st, prev):
+    """Per gauge: while the storm's closest pass is still ahead of it, follow each
+    new forecast. Once the closest point is the storm's own position (moving
+    away), keep the last approaching forecast so the line stays put and scrolls
+    off the graph. With no active storm, keep the old one (inactive) until its
+    passes are 2 days old."""
+    old = prev if prev and st is not None and prev.get("name") == st.get("name") else None
+    if st is None:
+        if not prev:
+            return None
+        cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=2)
+        live = [c for c in (prev.get("closest_by") or {}).values() if dt.datetime.fromisoformat(c["t"]) > cutoff]
+        return {**prev, "active": False} if live else None
+    t0 = dt.datetime.fromisoformat(st["track"][0]["t"])
+    for code, c in list(st["closest_by"].items()):
+        ahead = dt.datetime.fromisoformat(c["t"]) > t0
+        was = (old or {}).get("closest_by", {}).get(code)
+        if ahead:
+            continue
+        if was:  # moving away now: keep the last approaching forecast
+            st["closest_by"][code] = {**was, "passed": True}
+        else:  # never seen approaching this gauge: no line
+            del st["closest_by"][code]
+    st["closest"] = st["closest_by"].get("puert")
+    return st
+
+
 def main():
     data_dir = sys.argv[1] if len(sys.argv) > 1 else "data"
     path = os.path.join(data_dir, "surge.json")
@@ -189,7 +216,7 @@ def main():
             prev = {}
     gauges, fit_at = tides(prev)
     try:
-        st = storm()
+        st = freeze(storm(), prev.get("storm"))
     except Exception as e:  # keep the last good track
         print(f"nhc: {e}", file=sys.stderr)
         st = prev.get("storm")
