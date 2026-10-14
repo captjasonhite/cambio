@@ -139,10 +139,12 @@
 
   // NHC storm's closest pass to a gauge's area: follows the forecast while the
   // storm approaches, then fetch_surge.py freezes it so it scrolls off the graph.
-  // Dropped once it's older than the graph's 48 h of history.
+  // Dropped once it's older than the graph's 48 h of history, or if it never
+  // comes within ~160 nm (a "closest pass" far offshore isn't an event).
+  const NEAR_KM = 300;
   const approach = code => {
     const s = window.SURGE_DATA?.storm, c = s?.closest_by?.[code];
-    return c && Date.parse(c.t) > Date.now() - 48 * H ? c : null;
+    return c && c.km <= NEAR_KM && Date.parse(c.t) > Date.now() - 48 * H ? c : null;
   };
 
   const state = new WeakMap(); // root -> { data, opts, chart }
@@ -201,7 +203,8 @@
     if (g && g.now >= 0.3) badge = '<span class="wl-badge red">HIGH WATER</span>';
     else if (g && g.now >= 0.15) badge = '<span class="wl-badge amber">ABOVE FORECAST</span>';
     // rising/falling over the last 3 h; under ~1 cm is noise
-    const tr = g?.trend == null ? "" : Math.abs(g.trend) < 0.01 ? ` · <span>steady over 3 h</span>`
+    // (also steady if it rounds to 0 in the shown unit: 1 cm is only 0.4")
+    const tr = g?.trend == null ? "" : Math.abs(g.trend) < 0.01 || off(g.trend).slice(1) === "0" ? ` · <span>steady over 3 h</span>`
       : ` · <span style="color:${g.trend > 0 ? (g.trend >= 0.05 ? "var(--red)" : "var(--amber)") : "var(--green, #4ade80)"}; font-weight:700">${g.trend > 0 ? "▲ rising" : "▼ falling"} ${off(g.trend)}${prefs.unit === "ft" ? "" : " "}${offU()} over 3 h</span>`;
     const stale = g && Date.now() - g.last > 2 * H ? ` · <span class="error">gauge ${Math.round((Date.now() - g.last) / H)} h old</span>` : "";
     const top = Math.max(...rows.filter(r => !r.storm).map(r => r.tide));
