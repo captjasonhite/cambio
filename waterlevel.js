@@ -7,7 +7,7 @@
 (() => {
   const IOC = "https://www.ioc-sealevelmonitoring.org/service.php";
   const BAY = { lat: 20.68, lon: -105.40 }; // middle of Banderas Bay (approx.)
-  const PLACE = { puert: { name: "Banderas Bay", lat: BAY.lat, lon: BAY.lon }, mnza: { name: "Manzanillo", lat: 19.06, lon: -104.30 }, lpaz2: { name: "La Paz", lat: 24.27, lon: -110.33 } };
+  const PLACE = { puert: { name: "Banderas Bay", lat: BAY.lat, lon: BAY.lon, tz: "America/Mexico_City", utc: "UTC−6" }, mnza: { name: "Manzanillo", lat: 19.06, lon: -104.30, tz: "America/Mexico_City", utc: "UTC−6" }, lpaz2: { name: "La Paz", lat: 24.27, lon: -110.33, tz: "America/Mazatlan", utc: "UTC−7" } };
   const GAUGES = { puert: { short: "PV", color: "#22d3ee" }, mnza: { short: "Manz", color: "#fbbf24" }, lpaz2: { short: "LPZ", color: "#a78bfa" } };
   const H = 3600e3, M_FT = 3.28084, CM_IN = 0.393701;
 
@@ -47,8 +47,14 @@
 
   const pad = n => String(n).padStart(2, "0");
   const esc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const when = t => { const d = new Date(t); return DOW[d.getDay()] + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); };
+  // wall-clock parts in a gauge's own timezone (not the viewer's device)
+  const fmts = {};
+  const local = (t, tz) => {
+    const f = fmts[tz] || (fmts[tz] = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }));
+    const o = Object.fromEntries(f.formatToParts(t).map(p => [p.type, p.value]));
+    return { dow: o.weekday, h: +o.hour % 24, m: +o.minute };
+  };
+  const when = (t, tz) => { const d = local(t, tz); return d.dow + " " + pad(d.h) + ":" + pad(d.m); };
   const pref = (k, ok, d) => { try { const v = localStorage.getItem(k); return ok.includes(v) ? v : d; } catch (e) { return d; } };
   const save = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
   const prefs = { gauge: pref("wl-gauge", ["puert", "mnza", "lpaz2"], "puert"), unit: pref("wl-unit", ["m", "ft"], "m") };
@@ -198,6 +204,8 @@
     const sel = gauges[prefs.gauge] ? prefs.gauge : (pv ? "puert" : gauges.mnza ? "mnza" : "lpaz2");
     const rows = st.data.rows[sel];
     const g = gauges[sel];
+    const tz = PLACE[sel].tz;
+    const at = t => when(t, tz);
 
     let badge = '<span class="wl-badge flat">on forecast</span>';
     if (g && g.now >= 0.3) badge = '<span class="wl-badge red">HIGH WATER</span>';
@@ -220,10 +228,10 @@
       <div class="wl-chart"><canvas></canvas></div>
       <table>
         <tr><th>next highs</th><th>forecast</th><th>estimated</th></tr>
-        ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${when(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} ${r.km < 5 ? "arrival" : `closest ~${Math.round(r.km / 1.852)} nm`}` : ""}</td><td>${ht(r.tide)} ${prefs.unit}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
+        ${rows.map(r => `<tr${r.storm ? ' style="color:var(--red); font-weight:700"' : ""}><td>${at(r.t)}${r.storm ? ` 🌀 ${esc(r.storm)} ${r.km < 5 ? "arrival" : `closest ~${Math.round(r.km / 1.852)} nm`}` : ""}</td><td>${ht(r.tide)} ${prefs.unit}</td><td class="est" style="color:${r.storm || r.hi - top >= 0.3 ? "var(--red)" : r.hi - top >= 0.15 ? "var(--amber)" : "var(--text)"}">${ht(r.lo) === ht(r.hi) ? ht(r.hi) : ht(r.lo) + "–" + ht(r.hi)} ${prefs.unit}</td></tr>`).join("")}
       </table>
-      ${(() => { const s = window.SURGE_DATA.storm, c = approach(sel), pl = PLACE[sel].name; return c ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${s.advisory}): ${Date.parse(c.t) <= Date.now() ? `${s.name} passed closest to ${pl}${c.km < 5 ? "" : ` (~${Math.round(c.km / 1.852)} nm)`} ~<b>${when(Date.parse(c.t))}</b> per the last forecast before it turned away — red line on the graph.` : `${s.name} ${c.km < 5 ? `is over ${pl}` : `passes closest to ${pl}`} ~<b>${when(Date.parse(c.t))}</b>${c.km < 5 ? "" : `, ~${Math.round(c.km / 1.852)} nm away`}${Date.parse(c.t) < Date.now() + 48 * H ? " — red line on the graph" : " (on the graph once within 48 h)"}. Track error at 1–2 days is tens of nm.`}</p>` : ""; })()}
-      <p class="wl-note">Heights above low-water datum (from the ${{ puert: "PV", mnza: "Manzanillo", lpaz2: "La Paz (Pichilingue)" }[sel]} gauge). Estimate = forecast tide + ${sel === "puert" ? "PV's extra water, trending (low) or Manzanillo's (high, it led PV by ~1 day last time)" : `${{ mnza: "Manzanillo", lpaz2: "La Paz" }[sel]}'s extra water, trending`} + forecast pressure drop. Trending = the last 24 h change carried on and fading over ~a day (max ±30 cm more): an extrapolation, not a forecast. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
+      ${(() => { const s = window.SURGE_DATA.storm, c = approach(sel), pl = PLACE[sel].name; return c ? `<p class="wl-note" style="color:var(--text)">🌀 NHC forecast (adv ${s.advisory}): ${Date.parse(c.t) <= Date.now() ? `${s.name} passed closest to ${pl}${c.km < 5 ? "" : ` (~${Math.round(c.km / 1.852)} nm)`} ~<b>${at(Date.parse(c.t))}</b> per the last forecast before it turned away — red line on the graph.` : `${s.name} ${c.km < 5 ? `is over ${pl}` : `passes closest to ${pl}`} ~<b>${at(Date.parse(c.t))}</b>${c.km < 5 ? "" : `, ~${Math.round(c.km / 1.852)} nm away`}${Date.parse(c.t) < Date.now() + 48 * H ? " — red line on the graph" : " (on the graph once within 48 h)"}. Track error at 1–2 days is tens of nm.`}</p>` : ""; })()}
+      <p class="wl-note">Times are ${PLACE[sel].name} local (${PLACE[sel].utc}). Heights above low-water datum (from the ${{ puert: "PV", mnza: "Manzanillo", lpaz2: "La Paz (Pichilingue)" }[sel]} gauge). Estimate = forecast tide + ${sel === "puert" ? "PV's extra water, trending (low) or Manzanillo's (high, it led PV by ~1 day last time)" : `${{ mnza: "Manzanillo", lpaz2: "La Paz" }[sel]}'s extra water, trending`} + forecast pressure drop. Trending = the last 24 h change carried on and fading over ~a day (max ±30 cm more): an extrapolation, not a forecast. No waves, wind setup or surge. A rough guide, not a forecast — follow SMN / Protección Civil.</p>
     </div>`;
 
     const togs = [...root.querySelectorAll(".wl-tog"), ...(st.opts.ctrlEl ? st.opts.ctrlEl.querySelectorAll(".wl-tog") : [])];
@@ -260,7 +268,7 @@
       a = i;
     });
     // grid marks: midnight (day name) and noon, at the first 10-min bin of that hour
-    const hr = i => new Date(all[i].t).getHours();
+    const hr = i => local(all[i].t, tz).h;
     const mark = i => (i > 0 && hr(i) !== hr(i - 1) && (hr(i) === 0 || hr(i) === 12) ? hr(i) : null);
     const color = GAUGES[sel].color;
     // NHC forecast: when the storm passes closest to the selected gauge's area
@@ -285,7 +293,7 @@
     st.chart = new Chart(root.querySelector("canvas").getContext("2d"), {
       type: "line",
       data: {
-        labels: all.map(p => when(p.t)),
+        labels: all.map(p => at(p.t)),
         datasets: [
           { label: "forecast", data: all.map(p => r2(p.pred)), borderColor: "#7b8698", backgroundColor: "transparent", pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
           { label: "measured", data: all.map(p => r2(p.obs)), borderColor: color, backgroundColor: color + "33", fill: "-1", pointRadius: 0, borderWidth: 2, tension: 0.3 },
@@ -305,7 +313,7 @@
         scales: {
           x: {
             ticks: { color: "#aab3c0", autoSkip: false, maxRotation: 0, font: { size: 10 },
-              callback: (v, i) => { const m = mark(i); return m === 0 ? DOW[new Date(all[i].t).getDay()] : m === 12 ? "12h" : null; } },
+              callback: (v, i) => { const m = mark(i); return m === 0 ? local(all[i].t, tz).dow : m === 12 ? "12h" : null; } },
             grid: { color: c => (mark(c.index) === 0 ? "#3e4a5c" : "#252e3b"), drawTicks: false },
           },
           y: { title: { display: true, text: prefs.unit, color: "#aab3c0", font: { size: 10 } },
