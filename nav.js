@@ -7,6 +7,7 @@
     ["cad.html",    "🇨🇦 CAD <> MXN 🇲🇽"],
     ["usdcad.html", "🇺🇸 USA <> CAD 🇨🇦"],
     ["gas.html",    "⛽ Fuel Prices/Calc"],
+    ["units.html",  "📏 Convert Units 🌡️"],
     ["surge.html",  "🌊 Tide Actual vs Forecast"],
   ];
   const here = location.pathname.split("/").pop() || "index.html";
