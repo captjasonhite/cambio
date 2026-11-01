@@ -1,5 +1,7 @@
-// Hamburger menu + "add to home screen" help, shared by the sub-pages.
-// Each page supplies its own <button id="menu-btn"> where it wants it.
+// Hamburger menu, "add to home screen" help and Share popup, shared by all pages.
+// Each page supplies its own <button id="menu-btn"> where it wants it; any
+// element with id="share-btn" also opens the Share popup.
+// QR images live in icons/qr/ (make them with scripts/make_qr.py).
 (() => {
   const PAGES = [
     ["index.html",  "🏠 Home"],
@@ -50,6 +52,17 @@
   .nav-help h3 { font-size: 0.95rem; }
   .nav-help ol { padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
   .nav-help p { color: var(--muted); }
+  .nav-share { align-items: center; text-align: center; }
+  .nav-share .nav-help-head { width: 100%; }
+  .nav-share img { width: 220px; height: 220px; max-width: 100%; border-radius: 10px; background: #fff; image-rendering: pixelated; }
+  .nav-share-url { color: var(--cyan); font-size: 0.85rem; word-break: break-all; }
+  .nav-share-btns { display: flex; gap: 8px; width: 100%; }
+  .nav-share-btns button {
+    flex: 1; padding: 12px; border-radius: 12px; font: inherit; font-weight: 700; font-size: 0.95rem;
+    background: #1a2230; color: var(--text); border: 1px solid #33415a; cursor: pointer; touch-action: manipulation;
+  }
+  .nav-share-btns button:active { border-color: var(--cyan); }
+  .nav-share-btns button[hidden] { display: none; }
   `;
   document.head.appendChild(css);
 
@@ -60,6 +73,7 @@
     ${PAGES.map(([href, label]) =>
       `<a href="${href}" data-track="menu_${href.replace(".html", "")}"${href === here ? ' class="here"' : ""}></a>`).join("")}
     <hr>
+    <button type="button" id="nav-share-open" data-track="menu_share">📤 Share this page</button>
     <button type="button" id="nav-help-open" data-track="menu_help">❓ Add to home screen</button>
   </nav>`;
   menu.querySelectorAll("a").forEach((a, i) => { a.textContent = PAGES[i][1]; });
@@ -85,12 +99,54 @@
     <p>Each screen installs on its own, so add the ones you use most — the icon opens straight to that screen.</p>
   </div>`;
 
-  document.body.append(menu, help);
+  // Share the public address of this page, even when testing locally.
+  const page = here.replace(".html", "");
+  const canon = document.querySelector('link[rel="canonical"]');
+  const shareUrl = canon ? canon.href : location.href;
+  const share = document.createElement("div");
+  share.className = "nav-veil center";
+  share.hidden = true;
+  share.innerHTML = `<div class="nav-box nav-help nav-share" role="dialog" aria-label="Share">
+    <div class="nav-help-head"><span>📤 Share</span><button type="button" title="Close">×</button></div>
+    <p>Have a friend scan this with their phone camera, or send them the link.</p>
+    <img src="icons/qr/${page}.svg" alt="QR code for this page" width="220" height="220">
+    <div class="nav-share-url"></div>
+    <div class="nav-share-btns">
+      <button type="button" id="nav-share-send" data-track="share_send" hidden>📨 Send link</button>
+      <button type="button" id="nav-share-copy" data-track="share_copy">📋 Copy link</button>
+    </div>
+  </div>`;
+  share.querySelector(".nav-share-url").textContent = shareUrl;
+
+  document.body.append(menu, help, share);
+
+  const sendBtn = document.getElementById("nav-share-send");
+  const copyBtn = document.getElementById("nav-share-copy");
+  if (navigator.share) sendBtn.hidden = false;
+  sendBtn.addEventListener("click", () => {
+    navigator.share({ title: document.title, url: shareUrl }).catch(() => {}); // cancel is fine
+  });
+  copyBtn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+    } catch {
+      const t = document.createElement("textarea");
+      t.value = shareUrl; document.body.appendChild(t); t.select();
+      document.execCommand("copy"); t.remove();
+    }
+    copyBtn.textContent = "✅ Link copied";
+    setTimeout(() => { copyBtn.textContent = "📋 Copy link"; }, 2000);
+  });
+  const openShare = () => { menu.hidden = true; share.hidden = false; };
+  document.getElementById("nav-share-open").addEventListener("click", openShare);
+  const shareBtn = document.getElementById("share-btn");
+  if (shareBtn) shareBtn.addEventListener("click", openShare);
+  share.addEventListener("click", e => { if (e.target === share || e.target.closest(".nav-help-head button")) share.hidden = true; });
 
   const btn = document.getElementById("menu-btn");
   if (btn) btn.addEventListener("click", () => { menu.hidden = false; });
   menu.addEventListener("click", e => { if (e.target === menu) menu.hidden = true; });
   help.addEventListener("click", e => { if (e.target === help || e.target.closest(".nav-help-head button")) help.hidden = true; });
   document.getElementById("nav-help-open").addEventListener("click", () => { menu.hidden = true; help.hidden = false; });
-  document.addEventListener("keydown", e => { if (e.key === "Escape") menu.hidden = help.hidden = true; });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") menu.hidden = help.hidden = share.hidden = true; });
 })();

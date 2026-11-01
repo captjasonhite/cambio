@@ -35,9 +35,10 @@
   h2 { font-size:1rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.08em; margin-top:20px; }
   a.app { display:block; width:100%; max-width:340px; padding:14px 16px; border-radius:12px; background:var(--card);
           border:1px solid var(--edge); color:var(--text); text-decoration:none; font-weight:600; }
-  a.app:active, a.tip:active { border-color:var(--cyan); }
+  a.app:active, a.tip:active, button.tip:active { border-color:var(--cyan); }
   a.app span { display:block; font-size:.85rem; font-weight:400; color:var(--muted); margin-top:3px; }
-  a.tip { display:block; width:100%; max-width:340px; padding:14px; border-radius:12px; border:1px solid var(--cyan);
+  button.tip { background:none; font:inherit; cursor:pointer; }
+  a.tip, button.tip { display:block; width:100%; max-width:340px; padding:14px; border-radius:12px; border:1px solid var(--cyan);
           color:var(--cyan); text-decoration:none; font-weight:700; text-align:center; margin-top:8px; }
 </style>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-T83CQZCHBZ"></script>
@@ -62,11 +63,13 @@
   <a class="btn" data-track="open_gas" href="gas.html">⛽ Fuel Prices/Calc</a>
   <a class="btn" data-track="open_units" href="units.html">📏 Convert Units 🌡️<span>Length, temp, speed, volume, weight, area</span></a>
   <a class="btn" data-track="open_surge" href="surge.html">🌊 Tide Actual vs Forecast<span>Experimental: measured sea level vs forecast tide (PV, Manzanillo, La Paz)</span></a>
+  <button type="button" class="tip" id="share-btn" data-track="share_open">📤 Share with a friend</button>
   <a class="tip" data-track="kofi" href="https://ko-fi.com/jasonhite" target="_blank" rel="noopener">☕ Found this useful? Buy me a coffee</a>
   <h2 id="more">More from Jason</h2>
   <a class="app" data-track="aipassageplan" href="https://www.aipassageplan.com" target="_blank" rel="noopener">🌊 AI Passage Plan<span>Local weather knowledge for cruisers in Mexico and beyond.</span></a>
   <a class="app" data-track="eyachtsurveyor" href="https://www.eyachtsurveyor.com" target="_blank" rel="noopener">⛵ eYacht Surveyor<span>Evaluate yachts you're shopping for before you spend any money on a survey.</span></a>
   <a class="app" data-track="fb_group" href="https://www.facebook.com/groups/seaofcortezsailors" target="_blank" rel="noopener">👥 Sea of Cortez Sailors<span>7,000+ member community sharing tips and tricks for cruising in Mexico.</span></a>
   <a class="app" data-track="books" href="https://jasonhite.gumroad.com/" target="_blank" rel="noopener">📚 Jason's Books<span>Books by Jason Hite on Gumroad.</span></a>
+<script src="nav.js"></script>
 </body>
 </html>
