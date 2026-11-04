@@ -5,7 +5,7 @@ import qrcode
 import qrcode.image.svg
 
 BASE = "https://cambio.jasonhite.com/"
-PAGES = ["index", "usd", "cad", "usdcad", "gas", "units", "surge"]
+PAGES = ["index", "usd", "cad", "usdcad", "gas", "units"]
 out = Path(__file__).resolve().parent.parent / "icons" / "qr"
 out.mkdir(parents=True, exist_ok=True)
 
