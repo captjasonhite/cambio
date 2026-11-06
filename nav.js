@@ -1,6 +1,7 @@
 // Hamburger menu, "add to home screen" help and Share popup, shared by all pages.
 // Each page supplies its own <button id="menu-btn"> where it wants it; any
-// element with id="share-btn" also opens the Share popup.
+// element with id="share-btn" also opens the Share popup, and id="help-btn"
+// opens the "add to home screen" help.
 // QR images live in icons/qr/ (make them with scripts/make_qr.py).
 (() => {
   const PAGES = [
@@ -146,6 +147,9 @@
   if (btn) btn.addEventListener("click", () => { menu.hidden = false; });
   menu.addEventListener("click", e => { if (e.target === menu) menu.hidden = true; });
   help.addEventListener("click", e => { if (e.target === help || e.target.closest(".nav-help-head button")) help.hidden = true; });
-  document.getElementById("nav-help-open").addEventListener("click", () => { menu.hidden = true; help.hidden = false; });
+  const openHelp = () => { menu.hidden = true; help.hidden = false; };
+  document.getElementById("nav-help-open").addEventListener("click", openHelp);
+  const helpBtn = document.getElementById("help-btn");
+  if (helpBtn) helpBtn.addEventListener("click", openHelp);
   document.addEventListener("keydown", e => { if (e.key === "Escape") menu.hidden = help.hidden = share.hidden = true; });
 })();
